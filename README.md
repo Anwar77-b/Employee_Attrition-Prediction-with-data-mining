@@ -1,7 +1,8 @@
-# 👔 Employee Attrition Prediction Using Data Mining
+#  Employee Attrition Prediction Using Data Mining
 
 > **Data Mining Mini-Project 2026/2027 — Track A: Supervised Classification**
-> 🌐 **Live Web Application:** `<STREAMLIT_APP_URL>` · 📄 **Report:** [`docs/Rapport_MiniProject.pdf`](docs/Rapport_MiniProject.pdf)
+> 🌐 **Live Web Application:** `<STREAMLIT_APP_URL>` · 
+>📄 **Report:** [`docs/Rapport_MiniProject.pdf`](docs/Rapport_MiniProject.pdf)
 
 ---
 
@@ -216,6 +217,6 @@ streamlit run src/app.py
 - Pedregosa et al., *Scikit-learn: Machine Learning in Python*, JMLR 12:2825-2830, 2011.
 - Course material — Data Mining 2026/2027.
 
-## 📄 License
+<!-- ## 📄 License
 
-Released under the MIT License — see [`LICENSE`](LICENSE).
+Released under the MIT License — see [`LICENSE`](LICENSE). -->
