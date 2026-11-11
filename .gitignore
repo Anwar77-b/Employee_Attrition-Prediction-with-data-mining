@@ -1,22 +1,25 @@
-# Virtual environment
-venv/
-.venv/
-env/
-ENV/
-
-# Python cache
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+# ---------------------------------------------------------------------------
+# Virtual environments
+# ---------------------------------------------------------------------------
+venv/
+.venv/
+env/
+ENV/
 
-# Distribution / packaging
+# ---------------------------------------------------------------------------
+# Packaging / distribution
+# ---------------------------------------------------------------------------
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -30,14 +33,48 @@ wheels/
 .installed.cfg
 *.egg
 
-# Testing & Coverage
+# ---------------------------------------------------------------------------
+# Jupyter
+# ---------------------------------------------------------------------------
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+# ---------------------------------------------------------------------------
+# Tests / tooling caches
+# ---------------------------------------------------------------------------
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# IDE & OS
-.vscode/
-.idea/
+# ---------------------------------------------------------------------------
+# OS / editors
+# ---------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
+.vscode/
+.idea/
+
+# ---------------------------------------------------------------------------
+# Project artifacts
+# ---------------------------------------------------------------------------
+# Keep the data/processed directory but not its generated contents
+data/processed/*
+!data/processed/.gitkeep
+
+# Serialized models: the deliverable best_model.joblib is versioned on purpose,
+# every other model dump stays local (regenerate with scripts/train_pipeline.py)
+models/*.joblib
+!models/best_model.joblib
+models/*.pkl
+
+# Local logs and temporary files
+*.log
+*.tmp
+
+# Accidental Microsoft Access databases
+*.accdb
+*.laccdb
