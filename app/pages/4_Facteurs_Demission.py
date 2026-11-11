@@ -1,52 +1,57 @@
 """Page 4 — Attrition Factors: Feature importance and SHAP analysis."""
-import streamlit as st
-import sys
 from pathlib import Path
+import sys
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 
 # Ensure project root is on sys.path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 st.set_page_config(
-    page_title="Facteurs de Démission",
+    page_title="Facteurs de Démission — Attrition RH",
     page_icon="🔍",
     layout="wide",
 )
 
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-
 from app.utils import (
-    inject_custom_css,
-    render_sidebar_footer,
+    load_css,
     load_data,
     load_model,
     load_json,
+    kpi_card,
+    section_header,
+    render_sidebar,
     show_missing_artifact_warning,
     MODEL_NAMES,
+    PRIMARY_COLOR,
+    SECONDARY_COLOR,
+    COLOR_NO,
+    COLOR_YES,
+    COLOR_WARN,
+    PLOTLY_TEMPLATE,
+    PLOTLY_COLORWAY,
     NUMERICAL_FEATURES,
     CATEGORICAL_FEATURES,
     TARGET,
-    ID_COL,
     ALL_FEATURES,
 )
 
-inject_custom_css()
-st.sidebar.title("🔍 Facteurs")
-render_sidebar_footer()
+# Inject custom stylesheet
+load_css()
 
-# ── Color scheme ───────────────────────────────────────────────────────
-COLOR_NO = "#1E88E5"
-COLOR_YES = "#E53935"
-COLOR_MAP = {"No": COLOR_NO, "Yes": COLOR_YES}
+# Render shared sidebar
+render_sidebar(df=None, show_filters=False)
 
-st.title("🔍 Facteurs de Démission")
-st.markdown(
-    "Identifiez les variables les plus influentes sur l'attrition des employés "
-    "grâce à l'importance des features et aux analyses SHAP."
+# ── Header ─────────────────────────────────────────────────────────────
+section_header(
+    "Explicabilité & Facteurs Déterminants de Démission",
+    "Comprenez les leviers qui influencent le plus la décision des collaborateurs de quitter l'entreprise",
+    icon="🔍",
 )
-st.markdown("---")
 
 # ── Load artifacts ─────────────────────────────────────────────────────
 feature_importances = load_json("feature_importances.json")
@@ -58,232 +63,200 @@ def display_name(key: str) -> str:
     return MODEL_NAMES.get(key, key)
 
 
-# ── Section 1: Feature importances ────────────────────────────────────
-st.subheader("📊 Importance des Variables")
+tab_imp, tab_shap, tab_insights = st.tabs([
+    "📊 Importance des Variables (Modèles Arborescents)",
+    "🔬 Décomposition Globale SHAP",
+    "💡 Synthèse & Leviers d'Action RH",
+])
 
-if feature_importances is not None:
-    available_models = list(feature_importances.keys())
-    if available_models:
+# ── Tab 1: Feature Importances ─────────────────────────────────────────
+with tab_imp:
+    st.markdown("#### 🌲 Importance intrinsèque des caractéristiques (Gini / Impureté)")
+    st.caption("Calculée à partir des arbres de décision et forêts aléatoires entraînés sur le jeu de données.")
+
+    if feature_importances is not None and len(feature_importances) > 0:
+        available_models = list(feature_importances.keys())
         selected_model = st.selectbox(
-            "Choisir un modèle",
+            "Algorithme à analyser :",
             options=available_models,
             format_func=display_name,
+            key="fi_model_select",
         )
 
         fi = feature_importances[selected_model]
         fi_df = (
-            pd.DataFrame(
-                [{"Variable": k, "Importance": v} for k, v in fi.items()]
-            )
+            pd.DataFrame([{"Variable": k, "Importance": v} for k, v in fi.items()])
             .sort_values("Importance", ascending=True)
             .reset_index(drop=True)
         )
 
-        fig = px.bar(
+        top_var = fi_df.iloc[-1]
+        top2_var = fi_df.iloc[-2]
+
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            kpi_card("1er Facteur Clé", top_var["Variable"], delta=f"{top_var['Importance']*100:.1f}% d'importance", border_color=COLOR_YES)
+        with k2:
+            kpi_card("2ème Facteur Clé", top2_var["Variable"], delta=f"{top2_var['Importance']*100:.1f}% d'importance", border_color=PRIMARY_COLOR)
+        with k3:
+            kpi_card("Variables Analysées", f"{len(fi_df)} features", border_color=SECONDARY_COLOR)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        fig_fi = px.bar(
             fi_df,
             x="Importance",
             y="Variable",
             orientation="h",
-            title=f"Importance des Variables — {display_name(selected_model)}",
+            title=f"Importance relative des caractéristiques — <b>{display_name(selected_model)}</b>",
             color="Importance",
-            color_continuous_scale="Blues",
+            color_continuous_scale=["#E0E7FF", "#4F46E5"],
+            template=PLOTLY_TEMPLATE,
+            height=max(420, len(fi_df) * 32),
         )
-        fig.update_layout(
-            template="plotly_white",
-            height=max(400, len(fi_df) * 35),
+        fig_fi.update_layout(
+            coloraxis_showscale=False,
+            margin=dict(t=50, b=30, l=150, r=30),
+            xaxis_title="Score d'importance relative (somme = 1.0)",
             yaxis_title="",
-            xaxis_title="Importance",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_fi, use_container_width=True)
 
-        # Show data table
-        with st.expander("📋 Tableau des Importances"):
-            display_fi = fi_df.sort_values("Importance", ascending=False).reset_index(drop=True)
-            display_fi.index = display_fi.index + 1
-            display_fi.index.name = "Rang"
+        with st.expander("📋 Voir le tableau des valeurs d'importance"):
+            table_df = fi_df.sort_values("Importance", ascending=False).reset_index(drop=True)
+            table_df["Importance (%)"] = table_df["Importance"] * 100
             st.dataframe(
-                display_fi.style.format({"Importance": "{:.4f}"}).bar(
-                    subset=["Importance"], color="#90caf9"
-                ),
+                table_df,
+                column_config={
+                    "Importance (%)": st.column_config.ProgressColumn(
+                        "Poids Relatif",
+                        format="%.2f %%",
+                        min_value=0,
+                        max_value=float(table_df["Importance (%)"].max()),
+                    )
+                },
                 use_container_width=True,
+                hide_index=True,
             )
     else:
-        st.info("ℹ️ Aucune importance de variable disponible.")
-else:
-    show_missing_artifact_warning("feature_importances.json", "python src/train.py")
+        st.info(
+            "ℹ️ Les données d'importance des variables n'ont pas encore été calculées.\n\n"
+            "Exécutez `python scripts/train_pipeline.py` pour générer `results/feature_importances.json`."
+        )
 
-st.markdown("---")
-
-# ── Section 2: SHAP analysis ──────────────────────────────────────────
-st.subheader("🔬 Analyse SHAP")
-
-try:
-    import shap
-    import matplotlib.pyplot as plt
+# ── Tab 2: SHAP Analysis ───────────────────────────────────────────────
+with tab2:
+    st.markdown("#### 🔬 Explicabilité Globale par Valeurs de Shapley (SHAP)")
+    st.caption("Mesure la contribution marginale de chaque modalité à la probabilité de départ.")
 
     model = load_model("best_model")
 
-    if model is not None and df is not None:
-        st.markdown(
-            "Analyse SHAP sur un échantillon de 100 employés pour expliquer les décisions du meilleur modèle."
-        )
-
-        # Prepare sample data
-        X = df.drop(columns=[TARGET, ID_COL], errors="ignore")
-        sample = X.sample(n=min(100, len(X)), random_state=42)
-
-        # Get pipeline steps
-        pipeline = model
-        preprocessor = pipeline[:-1]  # All steps except classifier
-        classifier = pipeline.steps[-1][1]
-
-        # Transform the sample
-        X_transformed = preprocessor.transform(sample)
-
-        # Get feature names
-        try:
-            feature_names_out = preprocessor.get_feature_names_out()
-        except Exception:
-            feature_names_out = None
-
-        # Compute SHAP values
-        with st.spinner("⏳ Calcul des valeurs SHAP en cours..."):
-            explainer = shap.Explainer(classifier, feature_names=feature_names_out)
-            shap_values = explainer(X_transformed)
-
-        # For binary classification, select the positive class
-        try:
-            classes = list(model.classes_)
-            yes_idx = classes.index("Yes") if "Yes" in classes else 1
-        except Exception:
-            yes_idx = 1
-
-        if len(shap_values.shape) == 3:
-            shap_values_display = shap_values[:, :, yes_idx]
-        else:
-            shap_values_display = shap_values
-
-        # SHAP summary plot (beeswarm)
-        col_shap1, col_shap2 = st.columns(2)
-
-        with col_shap1:
-            st.markdown("#### Diagramme en Essaim (Beeswarm)")
-            fig_bee, ax_bee = plt.subplots(figsize=(10, 8))
-            shap.plots.beeswarm(shap_values_display, max_display=15, show=False)
-            plt.title("Impact des Variables sur la Prédiction", fontsize=14)
-            plt.tight_layout()
-            st.pyplot(fig_bee)
-            plt.close(fig_bee)
-
-        with col_shap2:
-            st.markdown("#### Importance Moyenne (|SHAP|)")
-            fig_bar_shap, ax_bar_shap = plt.subplots(figsize=(10, 8))
-            shap.plots.bar(shap_values_display, max_display=15, show=False)
-            plt.title("Importance Moyenne des Variables (SHAP)", fontsize=14)
-            plt.tight_layout()
-            st.pyplot(fig_bar_shap)
-            plt.close(fig_bar_shap)
-
-    elif model is None:
-        show_missing_artifact_warning(
-            "Modèle (best_model.joblib)",
-            "python src/train.py",
-        )
+    if model is None:
+        show_missing_artifact_warning("Modèle (best_model.joblib)", "python scripts/train_pipeline.py")
+    elif df is None:
+        show_missing_artifact_warning("Données (data/raw/Employee_Attrition_DataSet.csv)")
     else:
-        show_missing_artifact_warning("Jeu de données")
+        try:
+            import shap
+            import matplotlib.pyplot as plt
 
-except ImportError:
-    st.info(
-        "ℹ️ Le module **SHAP** n'est pas installé. "
-        "Installez-le avec `pip install shap` pour voir l'analyse SHAP détaillée."
-    )
-except Exception as e:
-    st.info(
-        f"ℹ️ L'analyse SHAP n'a pas pu être générée : {e}\n\n"
-        "Cela peut arriver avec certains types de modèles ou de données."
-    )
+            n_sample = min(120, len(df))
+            sample_df = df.sample(n=n_sample, random_state=42)
+            X_sample = sample_df[ALL_FEATURES]
 
-st.markdown("---")
+            pipeline = model
+            preprocessor = pipeline.named_steps.get("preprocessor") or pipeline[:-1]
+            classifier = pipeline.steps[-1][1]
 
-# ── Section 3: Bivariate analysis ─────────────────────────────────────
-st.subheader("📈 Analyse Bivariée")
+            X_trans = preprocessor.transform(X_sample)
+            try:
+                feat_names = list(preprocessor.get_feature_names_out())
+            except Exception:
+                feat_names = None
 
-if df is not None:
-    selected_feature = st.selectbox(
-        "Choisir une variable à analyser",
-        options=ALL_FEATURES,
-        key="bivariate_feature",
-    )
+            classes = list(getattr(classifier, "classes_", [0, 1]))
+            yes_idx = classes.index("Yes") if "Yes" in classes else (classes.index(1) if 1 in classes else 1)
 
-    if selected_feature in NUMERICAL_FEATURES:
-        # Violin / Box plot for numerical features
-        chart_type = st.radio(
-            "Type de graphique",
-            options=["Violin", "Boîte à Moustaches"],
-            horizontal=True,
-            key="chart_type_bivar",
-        )
-        if chart_type == "Violin":
-            fig_biv = px.violin(
-                df,
-                x=TARGET,
-                y=selected_feature,
-                color=TARGET,
-                color_discrete_map=COLOR_MAP,
-                box=True,
-                points="outliers",
-                title=f"Distribution de {selected_feature} par Attrition",
-            )
-        else:
-            fig_biv = px.box(
-                df,
-                x=TARGET,
-                y=selected_feature,
-                color=TARGET,
-                color_discrete_map=COLOR_MAP,
-                title=f"Distribution de {selected_feature} par Attrition",
-            )
-        fig_biv.update_layout(template="plotly_white", showlegend=False)
-        st.plotly_chart(fig_biv, use_container_width=True)
+            with st.spinner("⏳ Évaluation des valeurs SHAP sur un échantillon représentatif..."):
+                explainer = shap.Explainer(classifier, feature_names=feat_names)
+                shap_values = explainer(X_trans)
 
-    else:
-        # Grouped bar chart for categorical features
-        cross = (
-            df.groupby([selected_feature, TARGET])
-            .size()
-            .reset_index(name="Nombre")
-        )
-        fig_biv = px.bar(
-            cross,
-            x=selected_feature,
-            y="Nombre",
-            color=TARGET,
-            barmode="group",
-            color_discrete_map=COLOR_MAP,
-            title=f"Répartition de {selected_feature} par Attrition",
-        )
-        fig_biv.update_layout(template="plotly_white", legend_title_text="Attrition")
-        st.plotly_chart(fig_biv, use_container_width=True)
+                if len(shap_values.shape) == 3:
+                    shap_display = shap_values[:, :, yes_idx]
+                else:
+                    shap_display = shap_values
 
-        # Also show attrition rate by category
-        rate = (
-            df.groupby(selected_feature)[TARGET]
-            .apply(lambda x: (x == "Yes").mean() * 100)
-            .reset_index(name="Taux d'Attrition (%)")
-        )
-        fig_rate = px.bar(
-            rate.sort_values("Taux d'Attrition (%)", ascending=True),
-            x="Taux d'Attrition (%)",
-            y=selected_feature,
-            orientation="h",
-            title=f"Taux d'Attrition par {selected_feature}",
-            color="Taux d'Attrition (%)",
-            color_continuous_scale=["#1E88E5", "#E53935"],
-        )
-        fig_rate.update_layout(template="plotly_white")
-        st.plotly_chart(fig_rate, use_container_width=True)
-else:
-    show_missing_artifact_warning(
-        "Jeu de données (Employee_Attrition_DataSet.csv)",
-        "Placez le fichier dans data/raw/",
+            c_s1, c_s2 = st.columns(2)
+            with c_s1:
+                st.markdown("##### Beeswarm Plot (Distribution d'impact)")
+                fig_bw, ax_bw = plt.subplots(figsize=(8, 6))
+                shap.plots.beeswarm(shap_display, max_display=12, show=False)
+                plt.title("Impact des valeurs sur la prédiction de départ", fontsize=12)
+                plt.tight_layout()
+                st.pyplot(fig_bw)
+                plt.close(fig_bw)
+
+            with c_s2:
+                st.markdown("##### Bar Plot (|SHAP| Moyen)")
+                fig_bar_s, ax_bar_s = plt.subplots(figsize=(8, 6))
+                shap.plots.bar(shap_display, max_display=12, show=False)
+                plt.title("Importance globale absolue (|SHAP|)", fontsize=12)
+                plt.tight_layout()
+                st.pyplot(fig_bar_s)
+                plt.close(fig_bar_s)
+
+        except ImportError:
+            st.info("ℹ️ La bibliothèque `shap` n'est pas installée (`pip install shap`) pour afficher les graphiques de Shapley.")
+        except Exception as e:
+            st.info(f"ℹ️ Le calcul des valeurs SHAP n'a pas pu aboutir pour cet algorithme : {e}")
+
+# ── Tab 3: Actionable HR Insights ──────────────────────────────────────
+with tab3:
+    st.markdown("#### 💡 Synthèse Stratégique & Leviers RH Actionnables")
+    
+    st.markdown(
+        """
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 1rem;">
+            <div style="background: white; border: 1px solid #E5E7EB; border-left: 4px solid #EF4444; border-radius: 0.75rem; padding: 1.25rem;">
+                <h4 style="margin: 0 0 0.5rem 0; color: #111827;">⏰ 1. Maîtrise des Heures Supplémentaires</h4>
+                <p style="font-size: 0.9rem; color: #4B5563; margin: 0; line-height: 1.5;">
+                    L'<strong>OverTime</strong> régulier est le déclencheur n°1 d'attrition. Les collaborateurs cumulant des heures supplémentaires présentent un risque de démission multiplié par 2 à 3.
+                </p>
+                <div style="margin-top: 0.75rem; font-size: 0.8rem; font-weight: 600; color: #EF4444;">
+                    Action : Plafonner l'overtime et compenser en temps de récupération.
+                </div>
+            </div>
+
+            <div style="background: white; border: 1px solid #E5E7EB; border-left: 4px solid #F59E0B; border-radius: 0.75rem; padding: 1.25rem;">
+                <h4 style="margin: 0 0 0.5rem 0; color: #111827;">💰 2. Rémunération & Équité Interne</h4>
+                <p style="font-size: 0.9rem; color: #4B5563; margin: 0; line-height: 1.5;">
+                    Le <strong>MonthlyIncome</strong> présente un effet de seuil marqué. En dessous de la médiane sectorielle, le risque de départ est nettement plus élevé, particulièrement pour les profils techniques.
+                </p>
+                <div style="margin-top: 0.75rem; font-size: 0.8rem; font-weight: 600; color: #F59E0B;">
+                    Action : Réajustement des bas salaires et revalorisation au mérite.
+                </div>
+            </div>
+
+            <div style="background: white; border: 1px solid #E5E7EB; border-left: 4px solid #4F46E5; border-radius: 0.75rem; padding: 1.25rem;">
+                <h4 style="margin: 0 0 0.5rem 0; color: #111827;">⚖️ 3. Équilibre Vie Pro / Vie Privée</h4>
+                <p style="font-size: 0.9rem; color: #4B5563; margin: 0; line-height: 1.5;">
+                    Un score de <strong>WorkLifeBalance</strong> faible (&le; 2) couplé à une longue distance domicile-travail accélère le désengagement des collaborateurs.
+                </p>
+                <div style="margin-top: 0.75rem; font-size: 0.8rem; font-weight: 600; color: #4F46E5;">
+                    Action : Accords de télétravail flexible (2 à 3 jours par semaine).
+                </div>
+            </div>
+
+            <div style="background: white; border: 1px solid #E5E7EB; border-left: 4px solid #10B981; border-radius: 0.75rem; padding: 1.25rem;">
+                <h4 style="margin: 0 0 0.5rem 0; color: #111827;">🎯 4. Parcours d'Intégration & Fidélisation</h4>
+                <p style="font-size: 0.9rem; color: #4B5563; margin: 0; line-height: 1.5;">
+                    Les employés ayant moins de 2 ans d'ancienneté (<strong>YearsAtCompany</strong> &le; 2) sont les plus susceptibles de quitter l'entreprise si la satisfaction est basse.
+                </p>
+                <div style="margin-top: 0.75rem; font-size: 0.8rem; font-weight: 600; color: #10B981;">
+                    Action : Programme de parrainage et points d'étape semestriels.
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )

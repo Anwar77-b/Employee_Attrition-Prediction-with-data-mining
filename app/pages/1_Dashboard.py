@@ -1,369 +1,368 @@
 """Page 1 — Dashboard EDA: Interactive exploration of the employee dataset."""
-import streamlit as st
-import sys
 from pathlib import Path
+import sys
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 
 # Ensure project root is on sys.path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 st.set_page_config(
-    page_title="Dashboard EDA",
+    page_title="Dashboard EDA — Attrition RH",
     page_icon="📊",
     layout="wide",
 )
 
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-
 from app.utils import (
-    inject_custom_css,
-    render_sidebar_footer,
+    load_css,
     load_data,
-    metric_card,
+    kpi_card,
+    section_header,
+    render_sidebar,
     show_missing_artifact_warning,
+    PRIMARY_COLOR,
+    SECONDARY_COLOR,
+    COLOR_NO,
+    COLOR_YES,
+    COLOR_WARN,
+    COLOR_MAP,
+    PLOTLY_TEMPLATE,
+    PLOTLY_COLORWAY,
     NUMERICAL_FEATURES,
     CATEGORICAL_FEATURES,
     TARGET,
     ID_COL,
 )
 
-inject_custom_css()
+# Inject custom stylesheet
+load_css()
 
-# ── Color scheme ───────────────────────────────────────────────────────
-COLOR_NO = "#1E88E5"
-COLOR_YES = "#E53935"
-COLOR_MAP = {"No": COLOR_NO, "Yes": COLOR_YES}
+# Load raw data
+raw_df = load_data()
 
-# ── Load data ──────────────────────────────────────────────────────────
-df = load_data()
-
-if df is None:
+if raw_df is None:
     st.title("📊 Dashboard — Analyse Exploratoire")
     show_missing_artifact_warning(
         "Jeu de données (Employee_Attrition_DataSet.csv)",
         "Placez le fichier dans data/raw/",
     )
-    render_sidebar_footer()
+    render_sidebar(df=None, show_filters=False)
     st.stop()
 
-# ── Sidebar filters ───────────────────────────────────────────────────
-st.sidebar.title("🔎 Filtres")
+# Render sidebar with active filters synced in session_state
+filtered = render_sidebar(df=raw_df, show_filters=True)
 
-departments = st.sidebar.multiselect(
-    "Département",
-    options=sorted(df["Department"].unique()),
-    default=sorted(df["Department"].unique()),
+# ── Header & KPI summary ───────────────────────────────────────────────
+section_header(
+    "Tableau de Bord Exploratoire (EDA)",
+    "Analysez les facteurs d'attrition sur la population filtrée en temps réel",
+    icon="📊",
 )
 
-overtime_filter = st.sidebar.radio(
-    "Heures supplémentaires",
-    options=["Tous", "Oui", "Non"],
-    index=0,
-)
-
-promotion_filter = st.sidebar.radio(
-    "Promotion (5 dernières années)",
-    options=["Tous", "Oui", "Non"],
-    index=0,
-)
-
-age_range = st.sidebar.slider(
-    "Tranche d'âge",
-    min_value=int(df["Age"].min()),
-    max_value=int(df["Age"].max()),
-    value=(int(df["Age"].min()), int(df["Age"].max())),
-)
-
-income_range = st.sidebar.slider(
-    "Revenu mensuel",
-    min_value=int(df["MonthlyIncome"].min()),
-    max_value=int(df["MonthlyIncome"].max()),
-    value=(int(df["MonthlyIncome"].min()), int(df["MonthlyIncome"].max())),
-)
-
-years_range = st.sidebar.slider(
-    "Ancienneté (années)",
-    min_value=int(df["YearsAtCompany"].min()),
-    max_value=int(df["YearsAtCompany"].max()),
-    value=(int(df["YearsAtCompany"].min()), int(df["YearsAtCompany"].max())),
-)
-
-render_sidebar_footer()
-
-# ── Apply filters ──────────────────────────────────────────────────────
-filtered = df.copy()
-filtered = filtered[filtered["Department"].isin(departments)]
-
-if overtime_filter == "Oui":
-    filtered = filtered[filtered["OverTime"] == "Yes"]
-elif overtime_filter == "Non":
-    filtered = filtered[filtered["OverTime"] == "No"]
-
-if promotion_filter == "Oui":
-    filtered = filtered[filtered["PromotionLast5Years"] == "Yes"]
-elif promotion_filter == "Non":
-    filtered = filtered[filtered["PromotionLast5Years"] == "No"]
-
-filtered = filtered[
-    (filtered["Age"] >= age_range[0])
-    & (filtered["Age"] <= age_range[1])
-    & (filtered["MonthlyIncome"] >= income_range[0])
-    & (filtered["MonthlyIncome"] <= income_range[1])
-    & (filtered["YearsAtCompany"] >= years_range[0])
-    & (filtered["YearsAtCompany"] <= years_range[1])
-]
-
-# ── Header ─────────────────────────────────────────────────────────────
-st.title("📊 Dashboard — Analyse Exploratoire")
-
-# Filtered count summary
 col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+
+total_filtered = len(filtered)
+total_raw = len(raw_df)
+attrition_count = (filtered["Attrition"] == "Yes").sum() if total_filtered > 0 else 0
+attrition_pct = (attrition_count / total_filtered * 100) if total_filtered > 0 else 0.0
+avg_income = filtered["MonthlyIncome"].mean() if total_filtered > 0 else 0.0
+
 with col_info1:
-    metric_card("Employés Affichés", f"{len(filtered):,}", "metric-card-blue")
-with col_info2:
-    metric_card("Total Employés", f"{len(df):,}", "metric-card-purple")
-with col_info3:
-    attrition_pct = (
-        (filtered["Attrition"] == "Yes").sum() / len(filtered) * 100
-        if len(filtered) > 0
-        else 0
+    kpi_card(
+        "Employés Filtrés",
+        f"{total_filtered:,}",
+        delta=f"{(total_filtered/total_raw)*100:.1f}% de la base",
+        border_color=PRIMARY_COLOR,
+        help_text="Nombre de collaborateurs correspondant aux critères de la barre latérale",
     )
-    metric_card("Taux d'Attrition (filtré)", f"{attrition_pct:.1f}%", "metric-card-red")
+with col_info2:
+    kpi_card(
+        "Base Globale",
+        f"{total_raw:,}",
+        delta="Total entreprise",
+        border_color=SECONDARY_COLOR,
+        help_text="Volume total d'enregistrements du jeu de données",
+    )
+with col_info3:
+    kpi_card(
+        "Taux d'Attrition Filtré",
+        f"{attrition_pct:.1f}%",
+        delta=f"{attrition_count} départs",
+        delta_type="negative",
+        border_color=COLOR_YES,
+        help_text="Proportion des départs volontaires dans l'échantillon sélectionné",
+    )
 with col_info4:
-    avg_income = filtered["MonthlyIncome"].mean() if len(filtered) > 0 else 0
-    metric_card("Salaire Moyen (filtré)", f"{avg_income:,.0f}", "metric-card-green")
+    kpi_card(
+        "Salaire Moyen Filtré",
+        f"{avg_income:,.0f} MAD",
+        delta="Revenu mensuel",
+        border_color=COLOR_NO,
+        help_text="Moyenne des rémunérations pour la sélection courante",
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-if len(filtered) == 0:
-    st.warning("⚠️ Aucun employé ne correspond aux filtres sélectionnés.")
+if total_filtered == 0:
+    st.warning("⚠️ Aucun employé ne correspond aux filtres sélectionnés dans la barre latérale. Ajustez les critères pour afficher les graphiques.")
     st.stop()
 
 # ── Tabs ───────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📈 Distribution", "📊 Catégoriel", "🔗 Corrélation", "📉 Attrition", "📋 Statistiques", "🔍 Données"]
-)
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📈 Distributions Numériques",
+    "📊 Facteurs Catégoriels",
+    "🔗 Corrélations",
+    "📉 Taux d'Attrition Croisés",
+    "📋 Statistiques Détaillées",
+    "🔍 Données Filtrées",
+])
 
-# ── Tab 1: Distribution ───────────────────────────────────────────────
+# ── Tab 1: Numerical distributions ─────────────────────────────────────
 with tab1:
-    st.subheader("📈 Distribution des Variables Numériques")
-    selected_num = st.selectbox(
-        "Choisir une variable numérique",
-        options=NUMERICAL_FEATURES,
-        key="dist_num",
-    )
-    fig = px.histogram(
+    st.markdown("#### 📈 Distribution des variables numériques par statut d'attrition")
+    
+    col_sel, col_box = st.columns([2, 3])
+    with col_sel:
+        selected_num = st.selectbox(
+            "Variable numérique à analyser en détail :",
+            options=NUMERICAL_FEATURES,
+            index=3,  # MonthlyIncome
+            key="dist_num_select",
+        )
+    with col_box:
+        st.caption("Survolez les graphiques pour inspecter les valeurs individuelles ou utilisez la loupe pour zoomer.")
+
+    fig_hist = px.histogram(
         filtered,
         x=selected_num,
         color=TARGET,
         barmode="overlay",
         color_discrete_map=COLOR_MAP,
-        nbins=30,
-        title=f"Distribution de {selected_num} par Attrition",
-        labels={selected_num: selected_num, "count": "Nombre d'employés"},
-        opacity=0.7,
+        nbins=35,
+        marginal="box",
+        title=f"Distribution & Boîte à moustaches de <b>{selected_num}</b>",
+        labels={selected_num: selected_num, "count": "Nombre d'employés", TARGET: "Attrition"},
+        opacity=0.75,
+        template=PLOTLY_TEMPLATE,
     )
-    fig.update_layout(
-        bargap=0.05,
-        legend_title_text="Attrition",
-        template="plotly_white",
+    fig_hist.update_layout(
+        bargap=0.04,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=60, b=40, l=40, r=40),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig_hist, use_container_width=True)
 
-    # Show all numerical distributions in a grid
-    st.markdown("#### Toutes les distributions numériques")
-    cols = st.columns(3)
+    st.markdown("##### Vue d'ensemble des variables numériques")
+    cols_grid = st.columns(3)
     for i, feat in enumerate(NUMERICAL_FEATURES):
-        with cols[i % 3]:
-            fig_small = px.histogram(
+        with cols_grid[i % 3]:
+            fig_sub = px.histogram(
                 filtered,
                 x=feat,
                 color=TARGET,
                 barmode="overlay",
                 color_discrete_map=COLOR_MAP,
-                nbins=25,
-                title=feat,
-                opacity=0.7,
-                height=300,
+                nbins=22,
+                title=f"<b>{feat}</b>",
+                opacity=0.75,
+                height=260,
+                template=PLOTLY_TEMPLATE,
             )
-            fig_small.update_layout(
+            fig_sub.update_layout(
                 showlegend=False,
-                template="plotly_white",
-                margin=dict(t=40, b=20, l=20, r=20),
+                margin=dict(t=40, b=25, l=25, r=25),
+                xaxis_title="",
+                yaxis_title="",
             )
-            st.plotly_chart(fig_small, use_container_width=True)
+            st.plotly_chart(fig_sub, use_container_width=True)
 
-# ── Tab 2: Categorical ────────────────────────────────────────────────
+# ── Tab 2: Categorical variables ───────────────────────────────────────
 with tab2:
-    st.subheader("📊 Variables Catégorielles")
-    for cat_feat in CATEGORICAL_FEATURES:
-        cross = (
-            filtered.groupby([cat_feat, TARGET])
-            .size()
-            .reset_index(name="Nombre")
-        )
-        fig = px.bar(
-            cross,
-            x=cat_feat,
-            y="Nombre",
-            color=TARGET,
-            barmode="group",
-            color_discrete_map=COLOR_MAP,
-            title=f"Répartition de {cat_feat} par Attrition",
-            labels={"Nombre": "Nombre d'employés"},
-        )
-        fig.update_layout(template="plotly_white", legend_title_text="Attrition")
-        st.plotly_chart(fig, use_container_width=True)
+    st.markdown("#### 📊 Répartition des variables catégorielles")
+    cat_cols = st.columns(len(CATEGORICAL_FEATURES))
 
-# ── Tab 3: Correlation ────────────────────────────────────────────────
+    for idx, cat_feat in enumerate(CATEGORICAL_FEATURES):
+        with cat_cols[idx]:
+            cross = (
+                filtered.groupby([cat_feat, TARGET])
+                .size()
+                .reset_index(name="Effectif")
+            )
+            fig_cat = px.bar(
+                cross,
+                x=cat_feat,
+                y="Effectif",
+                color=TARGET,
+                barmode="group",
+                color_discrete_map=COLOR_MAP,
+                title=f"Attrition par <b>{cat_feat}</b>",
+                labels={"Effectif": "Employés", cat_feat: cat_feat},
+                template=PLOTLY_TEMPLATE,
+                height=380,
+            )
+            fig_cat.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(t=50, b=30, l=30, r=30),
+            )
+            st.plotly_chart(fig_cat, use_container_width=True)
+
+    # Department vs Overtime cross-tab
+    st.markdown("##### 🔍 Tri croisé : Département vs Heures Supplémentaires & Attrition")
+    cross_dept_ot = (
+        filtered.groupby(["Department", "OverTime", TARGET])
+        .size()
+        .reset_index(name="Effectif")
+    )
+    fig_cross = px.bar(
+        cross_dept_ot,
+        x="Department",
+        y="Effectif",
+        color=TARGET,
+        facet_col="OverTime",
+        barmode="stack",
+        color_discrete_map=COLOR_MAP,
+        title="Répartition par Département selon l'OverTime",
+        template=PLOTLY_TEMPLATE,
+        height=380,
+    )
+    st.plotly_chart(fig_cross, use_container_width=True)
+
+# ── Tab 3: Correlation Matrix ──────────────────────────────────────────
 with tab3:
-    st.subheader("🔗 Matrice de Corrélation")
-    numeric_df = filtered[NUMERICAL_FEATURES]
+    st.markdown("#### 🔗 Matrice des Corrélations de Pearson")
+    numeric_df = filtered[NUMERICAL_FEATURES].copy()
     corr_matrix = numeric_df.corr()
-    fig = px.imshow(
+
+    fig_corr = px.imshow(
         corr_matrix,
         text_auto=".2f",
         color_continuous_scale="RdBu_r",
         zmin=-1,
         zmax=1,
-        title="Corrélation entre les Variables Numériques",
+        title="Corrélations bivariées entre variables numériques",
         aspect="auto",
+        template=PLOTLY_TEMPLATE,
     )
-    fig.update_layout(template="plotly_white", height=600)
-    st.plotly_chart(fig, use_container_width=True)
+    fig_corr.update_layout(
+        height=540,
+        margin=dict(t=60, b=40, l=40, r=40),
+    )
+    st.plotly_chart(fig_corr, use_container_width=True)
 
-# ── Tab 4: Attrition analysis ─────────────────────────────────────────
+# ── Tab 4: Attrition deep-dive ─────────────────────────────────────────
 with tab4:
-    st.subheader("📉 Analyse de l'Attrition")
+    st.markdown("#### 📉 Analyse ciblée du taux de démission")
+    col_a1, col_a2 = st.columns(2)
 
-    # Attrition by department
-    dept_attrition = (
-        filtered.groupby("Department")[TARGET]
-        .apply(lambda x: (x == "Yes").mean() * 100)
-        .reset_index(name="Taux d'Attrition (%)")
-    )
-    fig1 = px.bar(
-        dept_attrition.sort_values("Taux d'Attrition (%)", ascending=True),
-        x="Taux d'Attrition (%)",
-        y="Department",
-        orientation="h",
-        title="Taux d'Attrition par Département",
-        color="Taux d'Attrition (%)",
-        color_continuous_scale=["#1E88E5", "#E53935"],
-    )
-    fig1.update_layout(template="plotly_white", yaxis_title="Département")
-    st.plotly_chart(fig1, use_container_width=True)
+    with col_a1:
+        # Attrition rate by department
+        dept_attr = (
+            filtered.groupby("Department")[TARGET]
+            .apply(lambda s: (s == "Yes").mean() * 100)
+            .reset_index(name="Taux (%)")
+            .sort_values("Taux (%)", ascending=True)
+        )
+        fig_dept = px.bar(
+            dept_attr,
+            x="Taux (%)",
+            y="Department",
+            orientation="h",
+            color="Taux (%)",
+            color_continuous_scale=["#10B981", "#F59E0B", "#EF4444"],
+            title="Taux d'Attrition par Département",
+            template=PLOTLY_TEMPLATE,
+            height=360,
+        )
+        fig_dept.update_layout(coloraxis_showscale=False)
+        st.plotly_chart(fig_dept, use_container_width=True)
 
-    col_a, col_b = st.columns(2)
-
-    # Attrition by JobLevel
-    with col_a:
-        level_attrition = (
+    with col_a2:
+        # Attrition rate by job level
+        level_attr = (
             filtered.groupby("JobLevel")[TARGET]
-            .apply(lambda x: (x == "Yes").mean() * 100)
-            .reset_index(name="Taux d'Attrition (%)")
+            .apply(lambda s: (s == "Yes").mean() * 100)
+            .reset_index(name="Taux (%)")
         )
-        fig2 = px.bar(
-            level_attrition,
+        fig_level = px.line(
+            level_attr,
             x="JobLevel",
-            y="Taux d'Attrition (%)",
-            title="Taux d'Attrition par Niveau de Poste",
-            color="Taux d'Attrition (%)",
-            color_continuous_scale=["#1E88E5", "#E53935"],
+            y="Taux (%)",
+            markers=True,
+            title="Taux d'Attrition selon le Niveau de Poste (JobLevel)",
+            template=PLOTLY_TEMPLATE,
+            height=360,
         )
-        fig2.update_layout(template="plotly_white", xaxis_title="Niveau de Poste")
-        st.plotly_chart(fig2, use_container_width=True)
+        fig_level.update_traces(line=dict(color=PRIMARY_COLOR, width=3), marker=dict(size=9, color=COLOR_YES))
+        st.plotly_chart(fig_level, use_container_width=True)
 
-    # Attrition by OverTime
-    with col_b:
-        ot_attrition = (
-            filtered.groupby("OverTime")[TARGET]
-            .apply(lambda x: (x == "Yes").mean() * 100)
-            .reset_index(name="Taux d'Attrition (%)")
-        )
-        fig3 = px.bar(
-            ot_attrition,
-            x="OverTime",
-            y="Taux d'Attrition (%)",
-            title="Taux d'Attrition par Heures Supplémentaires",
-            color="OverTime",
-            color_discrete_map={"Yes": COLOR_YES, "No": COLOR_NO},
-        )
-        fig3.update_layout(template="plotly_white", xaxis_title="Heures Supplémentaires")
-        st.plotly_chart(fig3, use_container_width=True)
+    # WorkLifeBalance vs JobSatisfaction heatmap of attrition rate
+    st.markdown("##### 🎯 Taux d'Attrition selon l'Équilibre Vie Pro/Perso et la Satisfaction")
+    pivot_wlb_sat = (
+        filtered.groupby(["WorkLifeBalance", "JobSatisfaction"])[TARGET]
+        .apply(lambda s: (s == "Yes").mean() * 100)
+        .unstack()
+    )
+    fig_heat = px.imshow(
+        pivot_wlb_sat,
+        labels=dict(x="Satisfaction au Travail", y="Équilibre Vie Pro/Perso", color="Taux (%)"),
+        x=[f"Niv {c}" for c in pivot_wlb_sat.columns],
+        y=[f"Niv {r}" for r in pivot_wlb_sat.index],
+        text_auto=".1f",
+        color_continuous_scale="YlOrRd",
+        template=PLOTLY_TEMPLATE,
+        height=360,
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
 
-    # Attrition by years bucket
-    filtered_copy = filtered.copy()
-    bins = [0, 2, 5, 10, 15, 20, 36]
-    labels_years = ["0-2", "3-5", "6-10", "11-15", "16-20", "21+"]
-    filtered_copy["Ancienneté"] = pd.cut(
-        filtered_copy["YearsAtCompany"], bins=bins, labels=labels_years, right=True
-    )
-    years_attrition = (
-        filtered_copy.groupby("Ancienneté", observed=False)[TARGET]
-        .apply(lambda x: (x == "Yes").mean() * 100)
-        .reset_index(name="Taux d'Attrition (%)")
-    )
-    fig4 = px.bar(
-        years_attrition,
-        x="Ancienneté",
-        y="Taux d'Attrition (%)",
-        title="Taux d'Attrition par Tranche d'Ancienneté",
-        color="Taux d'Attrition (%)",
-        color_continuous_scale=["#1E88E5", "#E53935"],
-    )
-    fig4.update_layout(template="plotly_white", xaxis_title="Ancienneté (années)")
-    st.plotly_chart(fig4, use_container_width=True)
-
-# ── Tab 5: Descriptive stats ──────────────────────────────────────────
+# ── Tab 5: Detailed Statistics ─────────────────────────────────────────
 with tab5:
-    st.subheader("📋 Statistiques Descriptives")
-    desc = filtered[NUMERICAL_FEATURES].describe().T
-    desc.columns = [
-        "Nombre", "Moyenne", "Écart-type", "Min",
-        "Q1 (25%)", "Médiane (50%)", "Q3 (75%)", "Max",
-    ]
+    st.markdown("#### 📋 Statistiques Descriptives & Tests d'Écart")
+    
+    stat_df = filtered.groupby(TARGET)[NUMERICAL_FEATURES].agg(["mean", "std", "median"])
+    st.dataframe(stat_df.T, use_container_width=True)
+
+    st.markdown("##### 📌 Synthèse comparative : Restés (No) vs Partis (Yes)")
+    summary_data = []
+    for feat in NUMERICAL_FEATURES:
+        mean_no = filtered[filtered[TARGET] == "No"][feat].mean() if (filtered[TARGET] == "No").sum() > 0 else 0
+        mean_yes = filtered[filtered[TARGET] == "Yes"][feat].mean() if (filtered[TARGET] == "Yes").sum() > 0 else 0
+        diff_pct = ((mean_yes - mean_no) / mean_no * 100) if mean_no != 0 else 0
+        summary_data.append({
+            "Variable": feat,
+            "Moyenne (Restés)": round(mean_no, 2),
+            "Moyenne (Partis)": round(mean_yes, 2),
+            "Écart (%)": round(diff_pct, 1),
+        })
+    comp_df = pd.DataFrame(summary_data)
     st.dataframe(
-        desc.style.format("{:.2f}").background_gradient(cmap="Blues", subset=["Moyenne"]),
+        comp_df,
+        column_config={
+            "Écart (%)": st.column_config.NumberColumn(
+                "Écart (%)",
+                format="%.1f %%",
+            )
+        },
         use_container_width=True,
+        hide_index=True,
     )
 
-    st.markdown("#### Répartition de la variable cible")
-    target_counts = filtered[TARGET].value_counts().reset_index()
-    target_counts.columns = ["Attrition", "Nombre"]
-    fig_target = px.pie(
-        target_counts,
-        names="Attrition",
-        values="Nombre",
-        color="Attrition",
-        color_discrete_map=COLOR_MAP,
-        title="Répartition de l'Attrition",
-        hole=0.4,
-    )
-    fig_target.update_layout(template="plotly_white")
-    st.plotly_chart(fig_target, use_container_width=True)
-
-# ── Tab 6: Raw data ───────────────────────────────────────────────────
+# ── Tab 6: Filtered Raw Data ───────────────────────────────────────────
 with tab6:
-    st.subheader("🔍 Données Filtrées")
-    search_term = st.text_input("🔎 Rechercher dans les données", "")
-    display_df = filtered.copy()
-    if search_term:
-        mask = display_df.astype(str).apply(
-            lambda row: row.str.contains(search_term, case=False).any(), axis=1
-        )
-        display_df = display_df[mask]
-
-    st.dataframe(display_df, use_container_width=True, height=500)
-    st.caption(f"Affichage de {len(display_df):,} lignes sur {len(filtered):,} filtrées ({len(df):,} au total)")
-
-    # Download button
-    csv_data = display_df.to_csv(index=False).encode("utf-8")
+    st.markdown(f"#### 🔍 Échantillon des données sélectionnées ({total_filtered:,} lignes)")
+    st.dataframe(
+        filtered.head(50),
+        use_container_width=True,
+        hide_index=True,
+    )
+    
+    csv_bytes = filtered.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="📥 Télécharger les données filtrées (CSV)",
-        data=csv_data,
-        file_name="donnees_filtrees.csv",
+        label="📥 Exporter la sélection en CSV",
+        data=csv_bytes,
+        file_name="donnees_filtrees_attrition.csv",
         mime="text/csv",
     )

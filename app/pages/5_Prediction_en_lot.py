@@ -1,242 +1,272 @@
 """Page 5 — Batch Prediction: Upload a CSV and predict attrition for multiple employees."""
-import streamlit as st
-import sys
 from pathlib import Path
+import sys
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 
 # Ensure project root is on sys.path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 st.set_page_config(
-    page_title="Prédiction en Lot",
+    page_title="Prédiction en Lot — Attrition RH",
     page_icon="📦",
     layout="wide",
 )
 
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-
 from app.utils import (
-    inject_custom_css,
-    render_sidebar_footer,
+    load_css,
     load_model,
-    metric_card,
+    kpi_card,
+    risk_badge,
+    section_header,
+    render_sidebar,
     show_missing_artifact_warning,
     get_risk_level,
-    get_risk_color,
     ALL_FEATURES,
-    DEPARTMENT_LIST,
+    PRIMARY_COLOR,
+    SECONDARY_COLOR,
+    COLOR_NO,
+    COLOR_YES,
+    COLOR_WARN,
+    PLOTLY_TEMPLATE,
+    PLOTLY_COLORWAY,
 )
 
-inject_custom_css()
-st.sidebar.title("📦 Prédiction en Lot")
-render_sidebar_footer()
+# Inject custom stylesheet
+load_css()
 
-st.title("📦 Prédiction en Lot")
-st.markdown(
-    "Chargez un fichier CSV contenant les données de plusieurs employés "
-    "pour obtenir des prédictions groupées de risque d'attrition."
-)
-st.markdown("---")
+# Render shared sidebar
+render_sidebar(df=None, show_filters=False)
 
-# ── Template download ──────────────────────────────────────────────────
-st.subheader("📄 Format Attendu")
-st.markdown(
-    "Le fichier CSV doit contenir les colonnes suivantes. "
-    "Vous pouvez télécharger un modèle vierge ci-dessous."
+# ── Header ─────────────────────────────────────────────────────────────
+section_header(
+    "Prédiction en Lot & Traitement Massif",
+    "Importez une liste de collaborateurs au format CSV pour calculer les scores d'attrition groupés",
+    icon="📦",
 )
 
-# Generate template
+# Template data for download and quick testing
 template_data = {
-    "Age": [35, 28],
-    "Department": ["Engineering", "Sales"],
-    "JobLevel": [3, 1],
-    "YearsAtCompany": [8, 1],
-    "MonthlyIncome": [12000, 4500],
-    "JobSatisfaction": [4, 2],
-    "WorkLifeBalance": [3, 2],
-    "OverTime": ["No", "Yes"],
-    "DistanceFromHome": [5.0, 30.0],
-    "PromotionLast5Years": ["Yes", "No"],
-    "PerformanceRating": [3, 2],
-    "TrainingHoursLastYear": [20, 5],
+    "EmployeeID": ["EMP1001", "EMP1002", "EMP1003", "EMP1004", "EMP1005", "EMP1006"],
+    "Age": [35, 28, 48, 24, 41, 31],
+    "Department": ["Engineering", "Sales", "Finance", "Marketing", "Operations", "IT"],
+    "JobLevel": [3, 1, 4, 1, 3, 2],
+    "YearsAtCompany": [8, 1, 15, 1, 10, 3],
+    "MonthlyIncome": [12500, 4200, 18500, 3800, 9600, 7100],
+    "JobSatisfaction": [4, 1, 3, 2, 4, 2],
+    "WorkLifeBalance": [3, 1, 3, 2, 4, 1],
+    "OverTime": ["No", "Yes", "No", "Yes", "No", "Yes"],
+    "DistanceFromHome": [5.0, 28.0, 10.0, 32.0, 8.0, 22.0],
+    "PromotionLast5Years": ["Yes", "No", "No", "No", "Yes", "No"],
+    "PerformanceRating": [3, 2, 4, 2, 3, 3],
+    "TrainingHoursLastYear": [22, 6, 18, 8, 25, 12],
 }
 template_df = pd.DataFrame(template_data)
 
-st.dataframe(template_df, use_container_width=True, hide_index=True)
+# ── Top Download & Quick Test Bar ──────────────────────────────────────
+col_left, col_right = st.columns([7, 5])
 
-template_csv = template_df.to_csv(index=False).encode("utf-8")
-st.download_button(
-    label="📥 Télécharger le Modèle CSV",
-    data=template_csv,
-    file_name="modele_prediction_attrition.csv",
-    mime="text/csv",
-)
+with col_left:
+    st.markdown("#### 📄 Fichier CSV Modèle")
+    st.caption("Le fichier importé doit contenir les 12 caractéristiques indispensables pour l'inférence du pipeline.")
+    
+    with st.expander("👁️ Consulter la structure des colonnes attendues", expanded=False):
+        st.dataframe(template_df, use_container_width=True, hide_index=True)
+
+    csv_template = template_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="📥 Télécharger la Trame CSV Type",
+        data=csv_template,
+        file_name="modele_prediction_attrition.csv",
+        mime="text/csv",
+    )
+
+with col_right:
+    st.markdown("#### 🚀 Test Rapide (Démo)")
+    st.caption("Vous pouvez charger directement l'échantillon type de 6 collaborateurs sans téléverser de fichier.")
+    use_sample = st.button("🧪 Charger l'échantillon de test immédiat", use_container_width=True)
 
 st.markdown("---")
 
-# ── File uploader ──────────────────────────────────────────────────────
-st.subheader("📤 Charger le Fichier")
+# ── File Upload Section ────────────────────────────────────────────────
 uploaded_file = st.file_uploader(
-    "Glissez-déposez ou sélectionnez un fichier CSV",
+    "Téléversez votre fichier CSV de collaborateurs :",
     type=["csv"],
-    help="Le fichier doit contenir toutes les colonnes listées ci-dessus.",
+    help="Sélectionnez un fichier .csv encodé en UTF-8 comportant les colonnes requises.",
 )
 
+# Determine working dataframe
+input_df = None
+
 if uploaded_file is not None:
-    # Read uploaded file
     try:
         input_df = pd.read_csv(uploaded_file)
-    except Exception as e:
-        st.error(f"❌ Erreur lors de la lecture du fichier : {e}")
-        st.stop()
+    except Exception as err:
+        st.error(f"❌ Erreur lors de la lecture du fichier CSV : {err}")
+elif use_sample or ("batch_sample_loaded" in st.session_state and st.session_state.batch_sample_loaded):
+    st.session_state.batch_sample_loaded = True
+    input_df = template_df.copy()
 
-    # Validate columns
-    missing_cols = [col for col in ALL_FEATURES if col not in input_df.columns]
+# ── Processing & Predictions ───────────────────────────────────────────
+if input_df is None:
+    st.info(
+        "📂 **Aucune donnée chargée pour le moment.**\n\n"
+        "Veuillez glisser-déposer un fichier CSV ci-dessus, ou cliquer sur "
+        "**« Charger l'échantillon de test immédiat »** pour tester la prédiction groupée."
+    )
+else:
+    # Column validation
+    missing_cols = [c for c in ALL_FEATURES if c not in input_df.columns]
     if missing_cols:
         st.error(
-            f"❌ Colonnes manquantes dans le fichier : **{', '.join(missing_cols)}**\n\n"
-            "Veuillez vérifier que votre fichier contient toutes les colonnes requises."
+            f"❌ Colonnes obligatoires absentes dans le fichier : **{', '.join(missing_cols)}**\n\n"
+            "Veuillez télécharger le modèle CSV ci-dessus pour vérifier la nomenclature exacte des champs."
         )
         st.stop()
 
-    st.success(f"✅ Fichier chargé avec succès — {len(input_df):,} employé(s) détecté(s).")
+    st.success(f"✅ Jeu de données valide — **{len(input_df):,} collaborateur(s)** détecté(s).")
 
-    # Show preview
-    with st.expander("👁️ Aperçu des données chargées", expanded=True):
-        st.dataframe(input_df.head(10), use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-
-    # Load model
+    # Load Model
     model = load_model("best_model")
-
     if model is None:
         show_missing_artifact_warning(
-            "Modèle (best_model.joblib)",
-            "python src/train.py",
+            "Modèle entraîné (best_model.joblib)",
+            "python scripts/train_pipeline.py",
         )
         st.stop()
 
-    # Predict
-    with st.spinner("⏳ Prédiction en cours..."):
+    with st.spinner("⏳ Calcul des probabilités d'attrition sur l'ensemble de la cohorte..."):
         try:
-            # Prepare input — keep only the required features
-            X = input_df[ALL_FEATURES].copy()
-            predictions = model.predict(X)
-            probas = model.predict_proba(X)
+            X_batch = input_df[ALL_FEATURES].copy()
+            preds = model.predict(X_batch)
+            probas = model.predict_proba(X_batch)
 
-            # Find index for "Yes" class
-            classes = list(model.classes_)
-            yes_idx = classes.index("Yes") if "Yes" in classes else 1
-
-            attrition_probas = probas[:, yes_idx]
+            classes = list(getattr(model, "classes_", [0, 1]))
+            yes_idx = classes.index("Yes") if "Yes" in classes else (classes.index(1) if 1 in classes else 1)
+            p_yes = probas[:, yes_idx]
         except Exception as e:
-            st.error(f"❌ Erreur lors de la prédiction : {e}")
+            st.error(f"❌ Échec de l'inférence : {e}")
             st.stop()
 
-    # Build results dataframe
-    results = input_df.copy()
-    results["Prédiction"] = predictions
-    results["Probabilité (%)"] = np.round(attrition_probas * 100, 2)
-    results["Niveau de Risque"] = [get_risk_level(p)[0] for p in attrition_probas]
+    # Enrich dataframe with scores & categories
+    res_df = input_df.copy()
+    res_df["Décision"] = ["Risque Départ" if p == "Yes" or p == 1 else "Fidélisé" for p in preds]
+    res_df["Probabilité Risque (%)"] = np.round(p_yes * 100, 2)
+    res_df["Score Risque"] = p_yes
+    res_df["Niveau Risque"] = [
+        "🔴 Élevé" if p >= 0.6 else ("🟡 Modéré" if p >= 0.3 else "🟢 Faible")
+        for p in p_yes
+    ]
 
-    # ── Results display ────────────────────────────────────────────────
-    st.subheader("📊 Résultats des Prédictions")
+    # ── Summary KPIs ───────────────────────────────────────────────────
+    st.markdown("#### 📊 Bilan Synthétique de la Cohorte")
 
-    # Summary KPIs
-    total = len(results)
-    n_low = (results["Niveau de Risque"] == "Faible").sum()
-    n_medium = (results["Niveau de Risque"] == "Modéré").sum()
-    n_high = (results["Niveau de Risque"] == "Élevé").sum()
-    pct_attrition = (results["Prédiction"] == "Yes").mean() * 100
+    n_total = len(res_df)
+    n_high = (p_yes >= 0.6).sum()
+    n_med = ((p_yes >= 0.3) & (p_yes < 0.6)).sum()
+    n_low = (p_yes < 0.3).sum()
+    global_risk_pct = (n_high / n_total) * 100
 
-    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-    with kpi1:
-        metric_card("Total Employés", f"{total:,}", "metric-card-blue")
-    with kpi2:
-        metric_card("🟢 Risque Faible", f"{n_low:,}", "metric-card-green")
-    with kpi3:
-        metric_card("🟡 Risque Modéré", f"{n_medium:,}", "metric-card-orange")
-    with kpi4:
-        metric_card("🔴 Risque Élevé", f"{n_high:,}", "metric-card-red")
-    with kpi5:
-        metric_card("Taux d'Attrition Prédit", f"{pct_attrition:.1f}%", "metric-card-purple")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        kpi_card("Effectif Évalué", f"{n_total:,}", border_color=PRIMARY_COLOR)
+    with c2:
+        kpi_card("Risque Élevé", f"{n_high:,}", delta=f"{global_risk_pct:.1f}% de la cohorte", delta_type="negative", border_color=COLOR_YES)
+    with c3:
+        kpi_card("Risque Modéré", f"{n_med:,}", delta="Vigilance", delta_type="neutral", border_color=COLOR_WARN)
+    with c4:
+        kpi_card("Risque Faible", f"{n_low:,}", delta="Stables", delta_type="positive", border_color=COLOR_NO)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Risk level distribution chart
-    risk_counts = pd.DataFrame({
-        "Niveau de Risque": ["🟢 Faible", "🟡 Modéré", "🔴 Élevé"],
-        "Nombre": [n_low, n_medium, n_high],
-    })
-    fig_risk = px.bar(
-        risk_counts,
-        x="Niveau de Risque",
-        y="Nombre",
-        color="Niveau de Risque",
-        color_discrete_map={
-            "🟢 Faible": "#28a745",
-            "🟡 Modéré": "#ffc107",
-            "🔴 Élevé": "#dc3545",
+    # ── Cohort Distribution Charts ─────────────────────────────────────
+    chart_c1, chart_c2 = st.columns([5, 7])
+    with chart_c1:
+        risk_counts = pd.DataFrame({
+            "Niveau": ["Faible (< 30%)", "Modéré (30-60%)", "Élevé (≥ 60%)"],
+            "Nombre": [n_low, n_med, n_high],
+        })
+        fig_donut = px.pie(
+            risk_counts,
+            values="Nombre",
+            names="Niveau",
+            hole=0.45,
+            color="Niveau",
+            color_discrete_map={
+                "Faible (< 30%)": COLOR_NO,
+                "Modéré (30-60%)": COLOR_WARN,
+                "Élevé (≥ 60%)": COLOR_YES,
+            },
+            title="Répartition des Risques",
+            template=PLOTLY_TEMPLATE,
+        )
+        fig_donut.update_layout(margin=dict(t=40, b=20, l=20, r=20), height=320)
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+    with chart_c2:
+        if "Department" in res_df.columns:
+            fig_bar = px.histogram(
+                res_df,
+                x="Department",
+                color="Niveau Risque",
+                barmode="stack",
+                color_discrete_map={
+                    "🟢 Faible": COLOR_NO,
+                    "🟡 Modéré": COLOR_WARN,
+                    "🔴 Élevé": COLOR_YES,
+                },
+                title="Distribution des Niveaux de Risque par Département",
+                template=PLOTLY_TEMPLATE,
+                height=320,
+            )
+            fig_bar.update_layout(margin=dict(t=40, b=20, l=20, r=20), xaxis_title="")
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    # ── Interactive Dataframe with Column Configuration ────────────────
+    st.markdown("#### 📋 Résultats Détaillés & Export")
+
+    filter_col1, filter_col2 = st.columns([4, 8])
+    with filter_col1:
+        selected_level = st.multiselect(
+            "Filtrer par niveau de risque :",
+            options=["🔴 Élevé", "🟡 Modéré", "🟢 Faible"],
+            default=["🔴 Élevé", "🟡 Modéré", "🟢 Faible"],
+        )
+    
+    display_df = res_df[res_df["Niveau Risque"].isin(selected_level)].sort_values("Score Risque", ascending=False)
+
+    st.dataframe(
+        display_df,
+        column_config={
+            "Score Risque": st.column_config.ProgressColumn(
+                "Indice de Risque",
+                help="Probabilité estimée d'attrition (0 à 100%)",
+                format="%.1f %%",
+                min_value=0.0,
+                max_value=1.0,
+            ),
+            "MonthlyIncome": st.column_config.NumberColumn(
+                "Salaire (MAD)",
+                format="%d MAD",
+            ),
+            "Probabilité Risque (%)": st.column_config.NumberColumn(
+                "Probabilité",
+                format="%.1f %%",
+            ),
         },
-        title="Répartition par Niveau de Risque",
-        text="Nombre",
+        use_container_width=True,
+        hide_index=True,
     )
-    fig_risk.update_layout(
-        template="plotly_white",
-        showlegend=False,
-        xaxis_title="",
-        yaxis_title="Nombre d'employés",
-    )
-    fig_risk.update_traces(textposition="outside")
-    st.plotly_chart(fig_risk, use_container_width=True)
 
-    # Probability distribution histogram
-    fig_prob = px.histogram(
-        results,
-        x="Probabilité (%)",
-        nbins=20,
-        title="Distribution des Probabilités d'Attrition",
-        color_discrete_sequence=["#1E88E5"],
-    )
-    fig_prob.update_layout(
-        template="plotly_white",
-        xaxis_title="Probabilité d'Attrition (%)",
-        yaxis_title="Nombre d'employés",
-    )
-    st.plotly_chart(fig_prob, use_container_width=True)
-
-    # Full results table with color coding
-    st.subheader("📋 Tableau des Résultats")
-
-    def highlight_risk(row):
-        """Apply background color based on risk level."""
-        risk = row["Niveau de Risque"]
-        if risk == "Élevé":
-            return ["background-color: #f8d7da"] * len(row)
-        elif risk == "Modéré":
-            return ["background-color: #fff3cd"] * len(row)
-        else:
-            return ["background-color: #d4edda"] * len(row)
-
-    styled_results = results.style.apply(highlight_risk, axis=1).format(
-        {"Probabilité (%)": "{:.2f}"}
-    )
-    st.dataframe(styled_results, use_container_width=True, height=500, hide_index=True)
-
-    # Download results
-    results_csv = results.to_csv(index=False).encode("utf-8")
+    # Export Button
+    export_csv = display_df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="📥 Télécharger les Résultats (CSV)",
-        data=results_csv,
-        file_name="resultats_prediction_attrition.csv",
+        label="📥 Exporter les Résultats Complets (CSV)",
+        data=export_csv,
+        file_name="predictions_attrition_lot.csv",
         mime="text/csv",
-        type="primary",
-    )
-else:
-    st.info(
-        "👆 Chargez un fichier CSV ci-dessus pour commencer la prédiction en lot.\n\n"
-        "Vous pouvez utiliser le modèle CSV fourni comme point de départ."
     )

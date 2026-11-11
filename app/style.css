@@ -1,0 +1,305 @@
+/* ── Variables de thème & design system ───────────────────────────── */
+:root {
+  --primary-color: #4F46E5;
+  --primary-light: #EEF2FF;
+  --primary-dark: #3730A3;
+  --bg-card: #F9FAFB;
+  --border-color: #E5E7EB;
+  --text-main: #111827;
+  --text-muted: #6B7280;
+  
+  --risk-low-bg: #D1FAE5;
+  --risk-low-text: #065F46;
+  --risk-low-border: #A7F3D0;
+  
+  --risk-med-bg: #FEF3C7;
+  --risk-med-text: #92400E;
+  --risk-med-border: #FDE68A;
+  
+  --risk-high-bg: #FEE2E2;
+  --risk-high-text: #991B1B;
+  --risk-high-border: #FECACA;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-card: rgba(30, 41, 59, 0.7);
+    --border-color: #334155;
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    
+    --risk-low-bg: rgba(6, 78, 59, 0.4);
+    --risk-low-text: #6EE7B7;
+    --risk-low-border: #059669;
+    
+    --risk-med-bg: rgba(120, 53, 15, 0.4);
+    --risk-med-text: #FCD34D;
+    --risk-med-border: #D97706;
+    
+    --risk-high-bg: rgba(127, 29, 29, 0.4);
+    --risk-high-text: #FCA5A5;
+    --risk-high-border: #DC2626;
+  }
+}
+
+/* ── Cartes KPI personnalisées et Streamlit native st.metric ──────── */
+.kpi-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 5px solid var(--primary-color) !important;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.kpi-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.kpi-delta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.kpi-delta.positive { color: #10B981; }
+.kpi-delta.negative { color: #EF4444; }
+.kpi-delta.neutral { color: var(--text-muted); }
+
+/* Rendre le composant standard st.metric identique */
+div[data-testid="stMetric"] {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 5px solid var(--primary-color) !important;
+  border-radius: 0.75rem;
+  padding: 0.9rem 1.15rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+div[data-testid="stMetric"]:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+}
+
+div[data-testid="stMetricLabel"] {
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  color: var(--text-muted) !important;
+}
+
+div[data-testid="stMetricValue"] {
+  font-size: 1.65rem !important;
+  font-weight: 700 !important;
+  color: var(--text-main) !important;
+}
+
+/* ── Badges de risque ─────────────────────────────────────────────── */
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.risk-badge.risk-low {
+  background-color: var(--risk-low-bg);
+  color: var(--risk-low-text);
+  border-color: var(--risk-low-border);
+}
+
+.risk-badge.risk-medium {
+  background-color: var(--risk-med-bg);
+  color: var(--risk-med-text);
+  border-color: var(--risk-med-border);
+}
+
+.risk-badge.risk-high {
+  background-color: var(--risk-high-bg);
+  color: var(--risk-high-text);
+  border-color: var(--risk-high-border);
+}
+
+.risk-badge.large {
+  font-size: 1.15rem;
+  padding: 0.5rem 1.25rem;
+}
+
+/* ── En-têtes de section et conteneurs ────────────────────────────── */
+.section-header-container {
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.section-header-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.section-header-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+/* ── Cartes de navigation (Accueil) ───────────────────────────────── */
+.nav-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.nav-card:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 6px 12px -2px rgba(79, 70, 229, 0.15);
+  transform: translateY(-2px);
+}
+
+.nav-card-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.nav-card-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 0.35rem;
+}
+
+.nav-card-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  line-height: 1.4;
+  flex-grow: 1;
+}
+
+/* ── Barre latérale (Sidebar) ────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+  border-right: 1px solid var(--border-color);
+}
+
+.sidebar-brand {
+  padding: 0.75rem 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.sidebar-brand-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--primary-color);
+  margin: 0;
+}
+
+.sidebar-brand-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.sidebar-filter-box {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Boutons et interactions ──────────────────────────────────────── */
+button[kind="primary"] {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+  color: white !important;
+  border-radius: 0.5rem !important;
+  font-weight: 600 !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+button[kind="primary"]:hover {
+  background-color: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.25) !important;
+}
+
+button[kind="secondary"] {
+  border-radius: 0.5rem !important;
+  border-color: var(--border-color) !important;
+}
+
+/* ── Simulation What-If Card ──────────────────────────────────────── */
+.whatif-card {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%);
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.whatif-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Tableau de données et alertes ─────────────────────────────────── */
+.stDataFrame {
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+

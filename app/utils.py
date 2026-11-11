@@ -1,11 +1,13 @@
-"""Shared utilities for the Streamlit application."""
-import streamlit as st
-import pandas as pd
-import numpy as np
+"""Shared utilities, UI components and theming for the Streamlit application."""
 import json
-import joblib
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple, Dict, Any, List
+
+import joblib
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
 # ── Paths ──────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -13,6 +15,27 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA = DATA_DIR / "raw" / "Employee_Attrition_DataSet.csv"
 MODELS_DIR = PROJECT_ROOT / "models"
 RESULTS_DIR = PROJECT_ROOT / "results"
+CSS_PATH = Path(__file__).resolve().parent / "style.css"
+
+# ── Design Tokens & Theming ────────────────────────────────────────────
+PRIMARY_COLOR = "#4F46E5"        # Indigo
+SECONDARY_COLOR = "#06B6D4"      # Cyan
+COLOR_NO = "#10B981"             # Emerald (Stayed / Low risk)
+COLOR_YES = "#EF4444"            # Rose / Red (Left / High risk)
+COLOR_WARN = "#F59E0B"           # Amber (Moderate risk)
+COLOR_MAP = {"No": COLOR_NO, "Yes": COLOR_YES}
+
+PLOTLY_TEMPLATE = "plotly_white"
+PLOTLY_COLORWAY = [
+    "#4F46E5",  # Indigo
+    "#06B6D4",  # Cyan
+    "#10B981",  # Emerald
+    "#F59E0B",  # Amber
+    "#EC4899",  # Pink
+    "#8B5CF6",  # Purple
+    "#3B82F6",  # Blue
+    "#64748B",  # Slate
+]
 
 # ── Feature definitions ────────────────────────────────────────────────
 NUMERICAL_FEATURES = [
@@ -36,53 +59,153 @@ MODEL_NAMES = {
 
 DEPARTMENT_LIST = ["Sales", "Engineering", "Operations", "Marketing", "Finance", "IT", "HR"]
 
-# ── Custom CSS ─────────────────────────────────────────────────────────
-def inject_custom_css():
-    """Inject custom CSS styles into the Streamlit app."""
-    st.markdown("""
-    <style>
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.2rem;
-        border-radius: 0.75rem;
-        color: white;
-        text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .metric-card h3 { font-size: 0.9rem; margin: 0; opacity: 0.9; }
-    .metric-card h1 { font-size: 2rem; margin: 0.3rem 0 0 0; }
-    .metric-card-green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
-    .metric-card-blue { background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%); }
-    .metric-card-orange { background: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%); }
-    .metric-card-red { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); }
-    .metric-card-purple { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    .risk-badge {
-        display: inline-block;
-        padding: 0.4rem 1.2rem;
-        border-radius: 2rem;
-        font-weight: bold;
-        font-size: 1.1rem;
-    }
-    .risk-low { background-color: #d4edda; color: #155724; }
-    .risk-medium { background-color: #fff3cd; color: #856404; }
-    .risk-high { background-color: #f8d7da; color: #721c24; }
-    div[data-testid="stSidebar"] > div:first-child {
-        padding-top: 1rem;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+
+# ── CSS Loading ────────────────────────────────────────────────────────
+def load_css() -> None:
+    """Load custom CSS from app/style.css and inject into Streamlit."""
+    if CSS_PATH.exists():
+        with open(CSS_PATH, "r", encoding="utf-8") as f:
+            css = f.read()
+        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <style>
+        .kpi-card { background:#f9fafb; border-left:4px solid #4F46E5; padding:1rem; border-radius:0.75rem; }
+        .risk-badge { padding:0.3rem 0.8rem; border-radius:1rem; font-weight:600; }
+        .risk-low { background:#d1fae5; color:#065f46; }
+        .risk-medium { background:#fef3c7; color:#92400e; }
+        .risk-high { background:#fee2e2; color:#991b1b; }
+        </style>
+        """, unsafe_allow_html=True)
 
 
-def metric_card(title: str, value, css_class: str = ""):
-    """Render a styled metric card."""
-    cls = f"metric-card {css_class}" if css_class else "metric-card"
+def inject_custom_css() -> None:
+    """Backwards compatibility alias for load_css()."""
+    load_css()
+
+
+# ── Reusable UI Components ─────────────────────────────────────────────
+def kpi_card(
+    titre: str,
+    valeur: Any,
+    delta: Optional[str] = None,
+    delta_type: str = "neutral",
+    border_color: str = PRIMARY_COLOR,
+    help_text: Optional[str] = None,
+) -> None:
+    """Render a modern KPI card with a colored left border and subtle shadow."""
+    delta_html = ""
+    if delta:
+        delta_class = "neutral"
+        if delta_type == "positive" or (isinstance(delta, str) and delta.startswith("+")):
+            delta_class = "positive"
+        elif delta_type == "negative" or (isinstance(delta, str) and delta.startswith("-")):
+            delta_class = "negative"
+        delta_html = f'<div class="kpi-delta {delta_class}">{delta}</div>'
+
+    title_attr = f'title="{help_text}"' if help_text else ""
     st.markdown(
-        f'<div class="{cls}"><h3>{title}</h3><h1>{value}</h1></div>',
+        f"""
+        <div class="kpi-card" style="border-left-color: {border_color} !important;" {title_attr}>
+            <div class="kpi-title">{titre}</div>
+            <div class="kpi-value">{valeur}</div>
+            {delta_html}
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
 
-# ── Data loading ───────────────────────────────────────────────────────
+def metric_card(title: str, value: Any, css_class: str = "") -> None:
+    """Backwards compatibility metric card using the new theme style."""
+    border_color = PRIMARY_COLOR
+    if "green" in css_class:
+        border_color = COLOR_NO
+    elif "red" in css_class:
+        border_color = COLOR_YES
+    elif "orange" in css_class or "amber" in css_class:
+        border_color = COLOR_WARN
+    elif "blue" in css_class or "cyan" in css_class:
+        border_color = SECONDARY_COLOR
+
+    kpi_card(title, value, border_color=border_color)
+
+
+def risk_badge(probabilite: float, large: bool = False) -> str:
+    """Return an HTML badge string with appropriate color and label based on probability."""
+    p_pct = probabilite * 100 if probabilite <= 1.0 else probabilite
+    size_cls = "large" if large else ""
+
+    if p_pct < 30.0:
+        return f'<span class="risk-badge risk-low {size_cls}">🟢 Risque Faible ({p_pct:.1f}%)</span>'
+    elif p_pct < 60.0:
+        return f'<span class="risk-badge risk-medium {size_cls}">🟡 Risque Modéré ({p_pct:.1f}%)</span>'
+    else:
+        return f'<span class="risk-badge risk-high {size_cls}">🔴 Risque Élevé ({p_pct:.1f}%)</span>'
+
+
+def section_header(titre: str, sous_titre: Optional[str] = None, icon: Optional[str] = None) -> None:
+    """Render a styled section header with title and subtitle."""
+    icon_html = f"<span>{icon}</span> " if icon else ""
+    sub_html = f'<p class="section-header-subtitle">{sous_titre}</p>' if sous_titre else ""
+    st.markdown(
+        f"""
+        <div class="section-header-container">
+            <h3 class="section-header-title">{icon_html}{titre}</h3>
+            {sub_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def gauge_chart(probabilite: float, title: str = "Risque d'Attrition") -> go.Figure:
+    """Generate an interactive Plotly gauge chart for attrition risk."""
+    p_pct = probabilite * 100 if probabilite <= 1.0 else probabilite
+
+    if p_pct < 30.0:
+        bar_color = COLOR_NO
+    elif p_pct < 60.0:
+        bar_color = COLOR_WARN
+    else:
+        bar_color = COLOR_YES
+
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=p_pct,
+            number={"suffix": "%", "font": {"size": 38, "color": "#111827", "family": "sans-serif"}},
+            title={"text": f"<b>{title}</b>", "font": {"size": 16, "color": "#4B5563"}},
+            gauge={
+                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "#9CA3AF"},
+                "bar": {"color": bar_color, "thickness": 0.28},
+                "bgcolor": "white",
+                "borderwidth": 0,
+                "steps": [
+                    {"range": [0, 30], "color": "#D1FAE5"},
+                    {"range": [30, 60], "color": "#FEF3C7"},
+                    {"range": [60, 100], "color": "#FEE2E2"},
+                ],
+                "threshold": {
+                    "line": {"color": bar_color, "width": 4},
+                    "thickness": 0.8,
+                    "value": p_pct,
+                },
+            },
+        )
+    )
+
+    fig.update_layout(
+        template=PLOTLY_TEMPLATE,
+        height=260,
+        margin=dict(t=40, b=10, l=30, r=30),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font={"family": "sans-serif"},
+    )
+    return fig
+
+
+# ── Data Loading & Model Loading ───────────────────────────────────────
 @st.cache_data
 def load_data() -> Optional[pd.DataFrame]:
     """Load the raw dataset. Returns None if file not found."""
@@ -116,12 +239,13 @@ def load_json(filename: str) -> Optional[dict]:
         return None
 
 
-# ── Risk level ─────────────────────────────────────────────────────────
-def get_risk_level(proba: float) -> tuple:
+# ── Risk Helpers ───────────────────────────────────────────────────────
+def get_risk_level(proba: float) -> Tuple[str, str, str]:
     """Return (label, css_class, emoji) based on attrition probability."""
-    if proba < 0.3:
+    p_pct = proba * 100 if proba <= 1.0 else proba
+    if p_pct < 30.0:
         return "Faible", "risk-low", "🟢"
-    elif proba < 0.6:
+    elif p_pct < 60.0:
         return "Modéré", "risk-medium", "🟡"
     else:
         return "Élevé", "risk-high", "🔴"
@@ -129,54 +253,171 @@ def get_risk_level(proba: float) -> tuple:
 
 def get_risk_color(proba: float) -> str:
     """Return a hex color based on attrition probability."""
-    if proba < 0.3:
-        return "#28a745"
-    elif proba < 0.6:
-        return "#ffc107"
+    p_pct = proba * 100 if proba <= 1.0 else proba
+    if p_pct < 30.0:
+        return COLOR_NO
+    elif p_pct < 60.0:
+        return COLOR_WARN
     else:
-        return "#dc3545"
+        return COLOR_YES
 
 
 # ── Recommendations ───────────────────────────────────────────────────
-def generate_recommendations(row: dict, proba: float) -> list:
+def generate_recommendations(row: dict, proba: float) -> List[str]:
     """Generate rule-based retention recommendations."""
     recs = []
     if row.get("OverTime") == "Yes":
-        recs.append("⏰ Réduire les heures supplémentaires — l'overtime est un facteur majeur de départ.")
+        recs.append("⏰ **Réduire les heures supplémentaires** : l'overtime est un facteur majeur de départ.")
     if row.get("JobSatisfaction", 5) <= 2:
-        recs.append("😊 Améliorer la satisfaction au travail — envisager un entretien individuel.")
+        recs.append("😊 **Améliorer la satisfaction au travail** : organiser un entretien individuel d'écoute.")
     if row.get("WorkLifeBalance", 5) <= 2:
-        recs.append("⚖️ Améliorer l'équilibre vie pro/perso — proposer du télétravail ou des horaires flexibles.")
+        recs.append("⚖️ **Équilibre vie pro/perso** : proposer du télétravail ou des horaires aménagés.")
     if row.get("YearsAtCompany", 0) <= 2:
-        recs.append("🎯 Renforcer l'intégration — les employés récents sont plus susceptibles de partir.")
-    if row.get("MonthlyIncome", 99999) < 5000:
-        recs.append("💰 Réviser la rémunération — le salaire est en dessous de la moyenne.")
+        recs.append("🎯 **Renforcer le parcours d'intégration** : les nouvelles recrues sont les plus vulnérables.")
+    if row.get("MonthlyIncome", 99999) < 5500:
+        recs.append("💰 **Réviser la grille salariale** : le salaire se situe sous la moyenne observée.")
     if row.get("DistanceFromHome", 0) > 25:
-        recs.append("🏠 Proposer du télétravail — la distance domicile-travail est élevée.")
+        recs.append("🏠 **Aménager le transport / distanciel** : le temps de trajet domicile-travail est élevé.")
     if row.get("PromotionLast5Years") == "No" and row.get("YearsAtCompany", 0) >= 5:
-        recs.append("📈 Envisager une promotion — aucune promotion depuis 5+ ans.")
+        recs.append("📈 **Planifier une évolution de carrière** : aucune promotion enregistrée depuis 5 ans.")
     if row.get("TrainingHoursLastYear", 99) < 10:
-        recs.append("📚 Augmenter les heures de formation — le développement professionnel fidélise.")
+        recs.append("📚 **Proposer des formations** : le développement des compétences fidélise les talents.")
     if not recs:
-        recs.append("✅ Profil stable — continuer les bonnes pratiques de rétention.")
+        recs.append("✅ **Profil stable** : maintenir les actions régulières de reconnaissance et d'écoute.")
     return recs
 
 
-# ── Sidebar ────────────────────────────────────────────────────────────
-def render_sidebar_footer():
-    """Render the sidebar footer with disclaimer."""
+# ── Global Sidebar & Filter Session State ──────────────────────────────
+def init_session_state(df: Optional[pd.DataFrame] = None) -> None:
+    """Initialize session state filters if not present."""
+    if "global_departments" not in st.session_state:
+        if df is not None and "Department" in df.columns:
+            st.session_state.global_departments = sorted(df["Department"].unique().tolist())
+        else:
+            st.session_state.global_departments = DEPARTMENT_LIST
+
+    if "global_overtime" not in st.session_state:
+        st.session_state.global_overtime = "Tous"
+
+    if "global_promotion" not in st.session_state:
+        st.session_state.global_promotion = "Tous"
+
+    if "global_age_range" not in st.session_state:
+        if df is not None and "Age" in df.columns:
+            st.session_state.global_age_range = (int(df["Age"].min()), int(df["Age"].max()))
+        else:
+            st.session_state.global_age_range = (20, 65)
+
+    if "global_income_range" not in st.session_state:
+        if df is not None and "MonthlyIncome" in df.columns:
+            st.session_state.global_income_range = (int(df["MonthlyIncome"].min()), int(df["MonthlyIncome"].max()))
+        else:
+            st.session_state.global_income_range = (2000, 20000)
+
+
+def render_sidebar(df: Optional[pd.DataFrame] = None, show_filters: bool = True) -> Optional[pd.DataFrame]:
+    """Render consistent sidebar branding, optional global filters, and footer."""
+    init_session_state(df)
+
+    st.sidebar.markdown(
+        """
+        <div class="sidebar-brand">
+            <span style="font-size: 1.6rem;">💼</span>
+            <div>
+                <h3 class="sidebar-brand-title">Attrition RH</h3>
+                <p class="sidebar-brand-sub">Data Mining & Classification</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    filtered_df = df.copy() if df is not None else None
+
+    if show_filters and df is not None:
+        st.sidebar.markdown("##### 🔎 Filtres Globaux")
+
+        with st.sidebar.expander("⚙️ Paramètres des filtres", expanded=True):
+            # Department filter
+            all_depts = sorted(df["Department"].unique().tolist())
+            st.session_state.global_departments = st.multiselect(
+                "Départements",
+                options=all_depts,
+                default=st.session_state.global_departments,
+                help="Filtrer par un ou plusieurs départements",
+            )
+
+            # Overtime filter
+            ot_options = ["Tous", "Oui", "Non"]
+            ot_idx = ot_options.index(st.session_state.global_overtime) if st.session_state.global_overtime in ot_options else 0
+            st.session_state.global_overtime = st.radio(
+                "Heures supplémentaires",
+                options=ot_options,
+                index=ot_idx,
+                horizontal=True,
+                help="Filtrer selon la réalisation d'heures supplémentaires",
+            )
+
+            # Age filter
+            min_age, max_age = int(df["Age"].min()), int(df["Age"].max())
+            st.session_state.global_age_range = st.slider(
+                "Tranche d'âge",
+                min_value=min_age,
+                max_value=max_age,
+                value=st.session_state.global_age_range,
+                help="Sélectionner l'intervalle d'âge des employés",
+            )
+
+            # Income filter
+            min_inc, max_inc = int(df["MonthlyIncome"].min()), int(df["MonthlyIncome"].max())
+            st.session_state.global_income_range = st.slider(
+                "Revenu mensuel",
+                min_value=min_inc,
+                max_value=max_inc,
+                value=st.session_state.global_income_range,
+                step=500,
+                help="Sélectionner l'intervalle de salaire mensuel",
+            )
+
+        # Apply filters to dataframe
+        if st.session_state.global_departments:
+            filtered_df = filtered_df[filtered_df["Department"].isin(st.session_state.global_departments)]
+
+        if st.session_state.global_overtime == "Oui":
+            filtered_df = filtered_df[filtered_df["OverTime"] == "Yes"]
+        elif st.session_state.global_overtime == "Non":
+            filtered_df = filtered_df[filtered_df["OverTime"] == "No"]
+
+        filtered_df = filtered_df[
+            (filtered_df["Age"] >= st.session_state.global_age_range[0])
+            & (filtered_df["Age"] <= st.session_state.global_age_range[1])
+            & (filtered_df["MonthlyIncome"] >= st.session_state.global_income_range[0])
+            & (filtered_df["MonthlyIncome"] <= st.session_state.global_income_range[1])
+        ]
+
+    render_sidebar_footer()
+    return filtered_df
+
+
+def render_sidebar_footer() -> None:
+    """Render the sidebar footer with links and academic disclaimer."""
     st.sidebar.markdown("---")
-    st.sidebar.caption(
-        "📊 **Projet Data Mining**\n\n"
-        "Prédiction d'attrition des employés\n\n"
-        "⚠️ Données synthétiques — Usage académique uniquement"
+    st.sidebar.markdown(
+        """
+        <div style="font-size: 0.78rem; color: #6B7280; line-height: 1.4;">
+            <p style="margin-bottom: 0.4rem;"><strong>📊 Data Mining 2026/2027</strong></p>
+            <p style="margin-bottom: 0.4rem;">Mini-Projet — Classification supervisée</p>
+            <p style="margin: 0;">⚠️ <em>Jeu de données synthétique à vocation académique.</em></p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
-# ── Missing artifact warning ──────────────────────────────────────────
-def show_missing_artifact_warning(artifact_name: str, fix_command: str = ""):
-    """Show a warning when an artifact is missing."""
-    msg = f"⚠️ **{artifact_name}** non trouvé."
-    if fix_command:
-        msg += f"\n\nPour générer cet artefact, exécutez :\n```\n{fix_command}\n```"
-    st.warning(msg)
+# ── Missing Artifact Warning ──────────────────────────────────────────
+def show_missing_artifact_warning(artifact_name: str, fix_command: str = "") -> None:
+    """Show a styled warning banner when an artifact is missing."""
+    st.warning(
+        f"⚠️ **Artefact manquant : {artifact_name}**\n\n"
+        + (f"Pour générer cet élément, exécutez la commande suivante dans le terminal :\n```powershell\n{fix_command}\n```" if fix_command else "")
+    )

@@ -1,305 +1,390 @@
 """Page 2 — Individual Prediction: Predict attrition risk for a single employee."""
-import streamlit as st
-import sys
 from pathlib import Path
+import sys
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
 # Ensure project root is on sys.path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 st.set_page_config(
-    page_title="Prédiction Individuelle",
+    page_title="Prédiction Individuelle — Attrition RH",
     page_icon="🔮",
     layout="wide",
 )
 
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-
 from app.utils import (
-    inject_custom_css,
-    render_sidebar_footer,
+    load_css,
     load_model,
-    metric_card,
+    kpi_card,
+    risk_badge,
+    section_header,
+    gauge_chart,
+    render_sidebar,
     show_missing_artifact_warning,
-    get_risk_level,
-    get_risk_color,
     generate_recommendations,
+    PRIMARY_COLOR,
+    SECONDARY_COLOR,
+    COLOR_NO,
+    COLOR_YES,
+    COLOR_WARN,
     ALL_FEATURES,
     DEPARTMENT_LIST,
 )
 
-inject_custom_css()
+# Inject custom stylesheet
+load_css()
 
-# ── Sidebar ────────────────────────────────────────────────────────────
-st.sidebar.title("🔮 Prédiction")
-st.sidebar.info("Remplissez le profil de l'employé et cliquez sur **Prédire**.")
-render_sidebar_footer()
+# Render shared sidebar
+render_sidebar(df=None, show_filters=False)
 
 # ── Header ─────────────────────────────────────────────────────────────
-st.title("🔮 Prédiction Individuelle")
-st.markdown(
-    "Saisissez les informations d'un employé ci-dessous pour obtenir une prédiction "
-    "du risque d'attrition en temps réel."
+section_header(
+    "Prédiction Individuelle & Aide à la Décision RH",
+    "Estimez le risque de démission d'un collaborateur et simulez des scénarios de rétention",
+    icon="🔮",
 )
-st.markdown("---")
 
-# ── Input form & results columns ──────────────────────────────────────
-col_form, col_spacer, col_result = st.columns([5, 1, 6])
+# Initialize session state for prediction results & what-if
+if "last_prediction" not in st.session_state:
+    st.session_state.last_prediction = None
+if "last_input_data" not in st.session_state:
+    st.session_state.last_input_data = None
+
+# Two-column layout: Form (left) | Result & What-if (right)
+col_form, col_result = st.columns([5, 6], gap="large")
 
 with col_form:
-    st.subheader("📝 Profil de l'Employé")
+    st.markdown("#### 📝 Profil du Collaborateur")
+    st.caption("Renseignez les paramètres démographiques, professionnels et organisationnels.")
 
-    with st.form("prediction_form"):
-        fc1, fc2 = st.columns(2)
+    with st.form("employee_prediction_form", clear_on_submit=False):
+        tab_perso, tab_job, tab_env = st.tabs([
+            "👤 Poste & Démographie",
+            "💼 Rémunération & Expérience",
+            "⚖️ Conditions de Travail",
+        ])
 
-        with fc1:
-            age = st.number_input(
-                "Âge", min_value=22, max_value=60, value=35, step=1
-            )
-            department = st.selectbox("Département", options=DEPARTMENT_LIST)
-            job_level = st.selectbox(
-                "Niveau de Poste", options=[1, 2, 3, 4, 5], index=1
-            )
-            years_at_company = st.number_input(
-                "Ancienneté (années)", min_value=0, max_value=35, value=5, step=1
-            )
-            monthly_income = st.number_input(
-                "Revenu Mensuel", min_value=3000, max_value=21410, value=8000, step=100
-            )
-            distance = st.number_input(
-                "Distance Domicile (km)", min_value=1.0, max_value=50.0, value=10.0, step=0.5
-            )
+        with tab_perso:
+            f_col1, f_col2 = st.columns(2)
+            with f_col1:
+                age = st.slider(
+                    "Âge de l'employé",
+                    min_value=18,
+                    max_value=65,
+                    value=34,
+                    help="Âge chronologique en années",
+                )
+                department = st.selectbox(
+                    "Département",
+                    options=DEPARTMENT_LIST,
+                    index=1,
+                    help="Département ou pôle d'activité principal de rattachement",
+                )
+            with f_col2:
+                job_level = st.select_slider(
+                    "Niveau hiérarchique (JobLevel)",
+                    options=[1, 2, 3, 4, 5],
+                    value=2,
+                    format_func=lambda x: f"Niveau {x}" + (" (Junior)" if x == 1 else " (Senior/Lead)" if x >= 4 else " (Intermédiaire)"),
+                    help="Position dans l'organigramme (1=Junior, 5=Directeur/Cadre dirigeant)",
+                )
+                distance = st.slider(
+                    "Distance domicile-travail (km)",
+                    min_value=1,
+                    max_value=60,
+                    value=12,
+                    help="Distance en kilomètres entre le domicile et le lieu de travail",
+                )
 
-        with fc2:
-            satisfaction_labels = {
-                1: "1 — Très insatisfait",
-                2: "2 — Insatisfait",
-                3: "3 — Neutre",
-                4: "4 — Satisfait",
-                5: "5 — Très satisfait",
-            }
-            job_satisfaction = st.select_slider(
-                "Satisfaction au Travail",
-                options=[1, 2, 3, 4, 5],
-                value=3,
-                format_func=lambda x: satisfaction_labels[x],
-            )
+        with tab_job:
+            j_col1, j_col2 = st.columns(2)
+            with j_col1:
+                monthly_income = st.number_input(
+                    "Revenu mensuel brut (MAD)",
+                    min_value=2500,
+                    max_value=35000,
+                    value=8200,
+                    step=500,
+                    help="Rémunération mensuelle brute en Dirhams marocains (MAD)",
+                )
+                years_at_company = st.slider(
+                    "Ancienneté dans l'entreprise (années)",
+                    min_value=0,
+                    max_value=40,
+                    value=4,
+                    help="Nombre d'années consécutives d'exercice dans la société",
+                )
+            with j_col2:
+                promotion = st.radio(
+                    "Promotion durant les 5 dernières années ?",
+                    options=["Non", "Oui"],
+                    index=0,
+                    horizontal=True,
+                    help="Indique si le collaborateur a bénéficié d'une promotion interne récente",
+                )
+                perf_labels = {1: "1 — Insuffisant", 2: "2 — Conforme", 3: "3 — Performant", 4: "4 — Exceptionnel"}
+                performance_rating = st.select_slider(
+                    "Évaluation de performance annuelle",
+                    options=[1, 2, 3, 4],
+                    value=3,
+                    format_func=lambda x: perf_labels[x],
+                    help="Note d'évaluation attribuée lors du dernier entretien annuel",
+                )
 
-            wlb_labels = {
-                1: "1 — Très mauvais",
-                2: "2 — Mauvais",
-                3: "3 — Bon",
-                4: "4 — Excellent",
-            }
-            work_life_balance = st.select_slider(
-                "Équilibre Vie Pro/Perso",
-                options=[1, 2, 3, 4],
-                value=3,
-                format_func=lambda x: wlb_labels[x],
-            )
+        with tab_env:
+            e_col1, e_col2 = st.columns(2)
+            with e_col1:
+                overtime = st.radio(
+                    "Heures supplémentaires régulières ?",
+                    options=["Non", "Oui"],
+                    index=1,
+                    horizontal=True,
+                    help="Le collaborateur effectue-t-il fréquemment des heures supplémentaires ?",
+                )
+                training_hours = st.slider(
+                    "Heures de formation (dernière année)",
+                    min_value=0,
+                    max_value=40,
+                    value=15,
+                    help="Nombre d'heures de formation suivies au cours des 12 derniers mois",
+                )
+            with e_col2:
+                sat_labels = {1: "1 — Très faible", 2: "2 — Faible", 3: "3 — Bonne", 4: "4 — Excellente"}
+                job_satisfaction = st.select_slider(
+                    "Satisfaction au travail",
+                    options=[1, 2, 3, 4],
+                    value=2,
+                    format_func=lambda x: sat_labels[x],
+                    help="Auto-évaluation ou score baromètre social de satisfaction professionnelle",
+                )
+                wlb_labels = {1: "1 — Mauvais", 2: "2 — Passable", 3: "3 — Bon", 4: "4 — Optimal"}
+                work_life_balance = st.select_slider(
+                    "Équilibre vie professionnelle / personnelle",
+                    options=[1, 2, 3, 4],
+                    value=2,
+                    format_func=lambda x: wlb_labels[x],
+                    help="Perception de l'équilibre entre temps de travail et vie privée",
+                )
 
-            overtime = st.radio(
-                "Heures Supplémentaires",
-                options=["Non", "Oui"],
-                index=0,
-                horizontal=True,
-            )
+        st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+        submitted = st.form_submit_button("🔮 Lancer l'Évaluation du Risque", type="primary", use_container_width=True)
 
-            promotion = st.radio(
-                "Promotion (5 dernières années)",
-                options=["Non", "Oui"],
-                index=0,
-                horizontal=True,
-            )
-
-            perf_labels = {
-                1: "1 — Faible",
-                2: "2 — Moyen",
-                3: "3 — Bon",
-                4: "4 — Excellent",
-            }
-            performance_rating = st.select_slider(
-                "Évaluation de Performance",
-                options=[1, 2, 3, 4],
-                value=3,
-                format_func=lambda x: perf_labels[x],
-            )
-
-            training_hours = st.number_input(
-                "Heures de Formation (dernière année)",
-                min_value=2, max_value=31, value=15, step=1,
-            )
-
-        submitted = st.form_submit_button(
-            "🔮 Prédire", use_container_width=True, type="primary"
-        )
-
-# ── Prediction logic ──────────────────────────────────────────────────
+# ── Prediction Logic ──────────────────────────────────────────────────
 with col_result:
-    if submitted:
-        model = load_model("best_model")
+    model = load_model("best_model")
 
+    if submitted:
         if model is None:
             show_missing_artifact_warning(
-                "Modèle (best_model.joblib)",
-                "python src/train.py",
+                "Modèle entraîné (best_model.joblib)",
+                "python scripts/train_pipeline.py",
             )
         else:
-            # Map French radio values to English
-            overtime_val = "Yes" if overtime == "Oui" else "No"
-            promotion_val = "Yes" if promotion == "Oui" else "No"
+            with st.spinner("⏳ Inférence du modèle Machine Learning en cours..."):
+                overtime_val = "Yes" if overtime == "Oui" else "No"
+                promotion_val = "Yes" if promotion == "Oui" else "No"
 
-            # Build input dataframe
-            input_data = pd.DataFrame([{
-                "Age": age,
-                "Department": department,
-                "JobLevel": job_level,
-                "YearsAtCompany": years_at_company,
-                "MonthlyIncome": monthly_income,
-                "JobSatisfaction": job_satisfaction,
-                "WorkLifeBalance": work_life_balance,
-                "OverTime": overtime_val,
-                "DistanceFromHome": distance,
-                "PromotionLast5Years": promotion_val,
-                "PerformanceRating": performance_rating,
-                "TrainingHoursLastYear": training_hours,
-            }])
+                input_data = pd.DataFrame([{
+                    "Age": int(age),
+                    "Department": str(department),
+                    "JobLevel": int(job_level),
+                    "YearsAtCompany": int(years_at_company),
+                    "MonthlyIncome": float(monthly_income),
+                    "JobSatisfaction": int(job_satisfaction),
+                    "WorkLifeBalance": int(work_life_balance),
+                    "OverTime": overtime_val,
+                    "DistanceFromHome": float(distance),
+                    "PromotionLast5Years": promotion_val,
+                    "PerformanceRating": int(performance_rating),
+                    "TrainingHoursLastYear": int(training_hours),
+                }])
 
-            # Predict
+                try:
+                    pred_class = model.predict(input_data)[0]
+                    probas = model.predict_proba(input_data)[0]
+                    classes = list(model.classes_)
+                    yes_idx = classes.index("Yes") if "Yes" in classes else 1
+                    proba_val = float(probas[yes_idx])
+
+                    st.session_state.last_prediction = {
+                        "prediction": pred_class,
+                        "proba": proba_val,
+                    }
+                    st.session_state.last_input_data = input_data
+                except Exception as err:
+                    st.error(f"❌ Erreur lors du calcul de la prédiction : {err}")
+
+    # Display results if available
+    if st.session_state.last_prediction is not None:
+        res = st.session_state.last_prediction
+        pred_label = res["prediction"]
+        proba_val = res["proba"]
+        inp = st.session_state.last_input_data
+
+        st.markdown("#### 📊 Diagnostic Prédictif")
+        
+        # Risk badge
+        st.markdown(
+            f"""
+            <div style="text-align: center; margin-bottom: 0.75rem;">
+                {risk_badge(proba_val, large=True)}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Plotly gauge chart
+        fig_g = gauge_chart(proba_val, title="Indice de Risque d'Attrition")
+        st.plotly_chart(fig_g, use_container_width=True)
+
+        # KPI Summary cards
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            kpi_card(
+                "Décision",
+                "Risque Départ" if pred_label == "Yes" else "Fidélisé",
+                border_color=COLOR_YES if pred_label == "Yes" else COLOR_NO,
+            )
+        with k2:
+            kpi_card("Probabilité", f"{proba_val * 100:.1f}%", border_color=COLOR_WARN)
+        with k3:
+            degre = "Critique" if proba_val >= 0.6 else "Vigilance" if proba_val >= 0.3 else "Sain"
+            kpi_card("Niveau d'Urgence", degre, border_color=COLOR_YES if proba_val >= 0.6 else COLOR_NO)
+
+        # Retention Recommendations
+        st.markdown("##### 💡 Recommandations de Rétention Personnalisées")
+        row_dict = inp.iloc[0].to_dict()
+        recs = generate_recommendations(row_dict, proba_val)
+        for r in recs:
+            st.markdown(f"- {r}")
+
+        # ── Bonus: What-If Simulation ─────────────────────────────────
+        st.markdown("---")
+        st.markdown(
+            """
+            <div class="whatif-card">
+                <div class="whatif-title">
+                    <span>⚡</span> <span>Simulation « What-If » (Scénarios de Rétention)</span>
+                </div>
+                <p style="font-size: 0.85rem; color: #4B5563; margin-bottom: 0.75rem;">
+                    Ajustez les leviers RH clés ci-dessous pour observer en direct l'impact sur le risque d'attrition.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        sim_c1, sim_c2 = st.columns(2)
+        with sim_c1:
+            sim_income_boost = st.select_slider(
+                "Augmentation de salaire simulée",
+                options=[0, 10, 20, 30, 40],
+                value=10,
+                format_func=lambda x: f"+{x}%" if x > 0 else "Aucune",
+            )
+            sim_suppress_ot = st.checkbox(
+                "Suppression des heures supplémentaires",
+                value=True if row_dict.get("OverTime") == "Yes" else False,
+            )
+        with sim_c2:
+            sim_improve_sat = st.select_slider(
+                "Amélioration satisfaction au travail",
+                options=[0, 1, 2],
+                value=1,
+                format_func=lambda x: f"+{x} point(s)" if x > 0 else "Inchangée",
+            )
+            sim_remote_wlb = st.checkbox("Programme Télétravail (Équilibre +1)", value=True)
+
+        if model is not None:
+            sim_data = inp.copy()
+            sim_data["MonthlyIncome"] = sim_data["MonthlyIncome"] * (1 + sim_income_boost / 100.0)
+            if sim_suppress_ot:
+                sim_data["OverTime"] = "No"
+            sim_data["JobSatisfaction"] = min(4, int(sim_data["JobSatisfaction"].iloc[0]) + sim_improve_sat)
+            if sim_remote_wlb:
+                sim_data["WorkLifeBalance"] = min(4, int(sim_data["WorkLifeBalance"].iloc[0]) + 1)
+
             try:
-                prediction = model.predict(input_data)[0]
-                proba = model.predict_proba(input_data)[0]
-                # Find index for "Yes" class
-                classes = list(model.classes_)
-                yes_idx = classes.index("Yes") if "Yes" in classes else 1
-                attrition_proba = float(proba[yes_idx])
-            except Exception as e:
-                st.error(f"❌ Erreur lors de la prédiction : {e}")
-                st.stop()
+                sim_proba = float(model.predict_proba(sim_data)[0][yes_idx])
+                delta_p = (sim_proba - proba_val) * 100
 
-            risk_label, risk_css, risk_emoji = get_risk_level(attrition_proba)
-            risk_color = get_risk_color(attrition_proba)
+                sc1, sc2 = st.columns(2)
+                with sc1:
+                    kpi_card("Risque Actuel", f"{proba_val*100:.1f}%", border_color="#9CA3AF")
+                with sc2:
+                    delta_str = f"{delta_p:+.1f}%"
+                    delta_type = "positive" if delta_p < 0 else "negative"
+                    kpi_card(
+                        "Risque Après Simulation",
+                        f"{sim_proba*100:.1f}%",
+                        delta=f"{delta_str} d'impact",
+                        delta_type=delta_type,
+                        border_color=COLOR_NO if sim_proba < proba_val else COLOR_YES,
+                    )
+            except Exception:
+                pass
 
-            # ── Results display ────────────────────────────────────
-            st.subheader("📊 Résultat de la Prédiction")
-
-            # Risk badge
-            st.markdown(
-                f'<div style="text-align:center; margin-bottom:1rem;">'
-                f'<span class="risk-badge {risk_css}" style="font-size:1.5rem;">'
-                f'{risk_emoji} Risque {risk_label}'
-                f'</span></div>',
-                unsafe_allow_html=True,
-            )
-
-            # Gauge chart
-            fig_gauge = go.Figure(
-                go.Indicator(
-                    mode="gauge+number",
-                    value=attrition_proba * 100,
-                    number={"suffix": "%", "font": {"size": 40}},
-                    title={"text": "Probabilité d'Attrition", "font": {"size": 18}},
-                    gauge={
-                        "axis": {"range": [0, 100], "tickwidth": 2},
-                        "bar": {"color": risk_color, "thickness": 0.3},
-                        "bgcolor": "white",
-                        "steps": [
-                            {"range": [0, 30], "color": "#d4edda"},
-                            {"range": [30, 60], "color": "#fff3cd"},
-                            {"range": [60, 100], "color": "#f8d7da"},
-                        ],
-                        "threshold": {
-                            "line": {"color": risk_color, "width": 4},
-                            "thickness": 0.8,
-                            "value": attrition_proba * 100,
-                        },
-                    },
-                )
-            )
-            fig_gauge.update_layout(height=300, margin=dict(t=60, b=20, l=30, r=30))
-            st.plotly_chart(fig_gauge, use_container_width=True)
-
-            # Metrics row
-            mc1, mc2, mc3 = st.columns(3)
-            with mc1:
-                metric_card("Prédiction", prediction, "metric-card-red" if prediction == "Yes" else "metric-card-green")
-            with mc2:
-                metric_card("Probabilité", f"{attrition_proba:.1%}", "metric-card-orange")
-            with mc3:
-                metric_card("Niveau de Risque", f"{risk_emoji} {risk_label}", f"metric-card-{'red' if risk_label == 'Élevé' else 'orange' if risk_label == 'Modéré' else 'green'}")
-
-            # Recommendations
-            st.markdown("---")
-            st.subheader("💡 Recommandations de Rétention")
-            row_dict = input_data.iloc[0].to_dict()
-            recs = generate_recommendations(row_dict, attrition_proba)
-            for rec in recs:
-                st.markdown(f"- {rec}")
-
-            # SHAP explanation (optional)
-            st.markdown("---")
-            st.subheader("🔬 Explication de la Prédiction (SHAP)")
+        # ── SHAP Explanation ──────────────────────────────────────────
+        st.markdown("---")
+        with st.expander("🔬 Analyse Explicative SHAP (Feature Contributions)", expanded=False):
             try:
                 import shap
                 import matplotlib.pyplot as plt
 
-                # Get the preprocessor and classifier from the pipeline
                 pipeline = model
                 preprocessor = pipeline.named_steps.get("preprocessor") or pipeline[:-1]
                 classifier = pipeline.steps[-1][1]
 
-                # Transform input data
-                X_transformed = preprocessor.transform(input_data)
-
-                # Get feature names after transformation
+                X_trans = preprocessor.transform(inp)
                 try:
-                    feature_names = preprocessor.get_feature_names_out()
+                    feat_names = preprocessor.get_feature_names_out()
                 except Exception:
-                    feature_names = None
+                    feat_names = None
 
-                # Create SHAP explainer
-                explainer = shap.Explainer(classifier, feature_names=feature_names)
-                shap_values = explainer(X_transformed)
+                explainer = shap.Explainer(classifier, feature_names=feat_names)
+                shap_vals = explainer(X_trans)
 
-                # For binary classification, use class 1 (Yes) shap values
-                if len(shap_values.shape) == 3:
-                    shap_values_display = shap_values[:, :, yes_idx]
+                if len(shap_vals.shape) == 3:
+                    shap_disp = shap_vals[:, :, yes_idx]
                 else:
-                    shap_values_display = shap_values
+                    shap_disp = shap_vals
 
-                fig_shap, ax_shap = plt.subplots(figsize=(10, 6))
-                shap.plots.waterfall(shap_values_display[0], max_display=12, show=False)
-                plt.title("Contribution des Variables à la Prédiction", fontsize=14)
+                fig_shap, ax = plt.subplots(figsize=(9, 5))
+                shap.plots.waterfall(shap_disp[0], max_display=10, show=False)
+                plt.title("Contributions SHAP à la Prédiction", fontsize=13)
                 plt.tight_layout()
                 st.pyplot(fig_shap)
                 plt.close(fig_shap)
-
             except ImportError:
-                st.info(
-                    "ℹ️ Le module **SHAP** n'est pas installé. "
-                    "Installez-le avec `pip install shap` pour voir les explications détaillées."
-                )
+                st.info("ℹ️ Le module **SHAP** n'est pas installé (`pip install shap`) pour afficher la décomposition graphique.")
             except Exception as e:
-                st.info(
-                    f"ℹ️ L'explication SHAP n'a pas pu être générée : {e}\n\n"
-                    "Cela peut arriver avec certains types de modèles."
-                )
-    else:
-        st.subheader("📊 Résultat de la Prédiction")
-        st.info(
-            "👈 Remplissez le formulaire à gauche et cliquez sur **Prédire** "
-            "pour voir les résultats ici."
-        )
+                st.info(f"ℹ️ L'explication SHAP détaillée n'est pas disponible pour ce type d'estimateur ({e}).")
 
-        # Show example risk levels
-        st.markdown("#### Niveaux de Risque")
+    else:
+        st.markdown("#### 📊 Diagnostic Prédictif")
+        st.info("👈 Complétez les paramètres du collaborateur dans le formulaire à gauche puis cliquez sur **Lancer l'Évaluation du Risque**.")
+        
+        st.markdown("##### Échelle d'évaluation du risque")
         st.markdown(
             """
-            | Probabilité | Niveau | Indicateur |
-            |:-----------:|:------:|:----------:|
-            | < 30% | 🟢 Faible | Risque minimal |
-            | 30% – 60% | 🟡 Modéré | Surveillance recommandée |
-            | ≥ 60% | 🔴 Élevé | Action urgente requise |
-            """
+            <div style="background: white; border: 1px solid #E5E7EB; border-radius: 0.75rem; padding: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span class="risk-badge risk-low">🟢 Faible (&lt; 30%)</span>
+                    <span style="font-size: 0.85rem; color: #4B5563;">Situation stable, fidélisation standard</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span class="risk-badge risk-medium">🟡 Modéré (30% - 60%)</span>
+                    <span style="font-size: 0.85rem; color: #4B5563;">Vigilance managériale, entretien d'écoute recommandé</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="risk-badge risk-high">🔴 Élevé (&ge; 60%)</span>
+                    <span style="font-size: 0.85rem; color: #4B5563;">Risque critique de départ, action corrective prioritaire</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
