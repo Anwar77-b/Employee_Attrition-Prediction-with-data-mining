@@ -225,41 +225,62 @@ Released under the MIT License — see [`LICENSE`](LICENSE). -->
 
 ## Application web (Streamlit)
 
-- **Statut :** En cours de développement
+- **Statut :** ✅ Opérationnelle
 - **Commande de lancement :**
   ```bash
   streamlit run app/Home.py
   ```
 
+### Design System
+
+L'application utilise un **thème indigo professionnel** (`#4F46E5`) avec :
+
+- `.streamlit/config.toml` — thème Streamlit (couleur primaire, fond clair, texte sombre)
+- `app/style.css` — styles personnalisés : cartes KPI, badges de risque (vert/orange/rouge), sidebar branded
+- `app/utils.py` — composants réutilisables : `kpi_card()`, `risk_badge()`, `section_header()`, `gauge_chart()`
+- Graphiques **Plotly** avec palette cohérente (template `plotly_white`)
+
 ### Arborescence
 
 ```text
 app/
-├── Home.py
-├── utils.py
+├── Home.py                    # Page d'accueil avec KPI globaux et navigation
+├── utils.py                   # Composants UI, chargement données/modèles
+├── cleaning.py                # Fonction clean_data(df) réutilisable
+├── style.css                  # Feuille de styles CSS personnalisée
 └── pages/
-    ├── 1_Dashboard.py
-    ├── 2_Prediction.py
-    ├── 3_Performance_Modeles.py
-    ├── 4_Facteurs_Demission.py
-    └── 5_Prediction_en_lot.py
+    ├── 0_EDA_Nettoyage.py     # 🔬 EDA & Nettoyage (7 onglets)
+    ├── 1_Dashboard.py         # 📊 Dashboard analytique interactif
+    ├── 2_Prediction.py        # 🔮 Prédiction individuelle + What-If + SHAP
+    ├── 3_Performance_Modeles.py # 🏆 Benchmark 6 modèles
+    ├── 4_Facteurs_Demission.py  # 🔍 Feature importance + SHAP global
+    ├── 5_Prediction_en_lot.py   # 📦 Prédiction CSV en lot
+    └── 6_A_Propos.py            # 📖 Documentation & éthique
 ```
 
-### Pages prévues
+### Pages disponibles
 
 | Page | Description / Fonctionnalités |
 |---|---|
-| **Dashboard** | KPI, graphiques, heatmap, filtres |
-| **Prédiction individuelle** | Formulaire, jauge, risque, SHAP local |
-| **Performance des modèles** | Métriques, matrice de confusion, ROC |
-| **Facteurs de démission** | Importance des variables, SHAP global, top 5 |
-| **Prédiction en lot** | Upload CSV, tableau trié par risque, export |
+| **0. EDA & Nettoyage** | Aperçu dataset, qualité des données (NaN, doublons, outliers IQR), pipeline de nettoyage avec comparaison avant/après, analyses uni et bivariées, heatmap de corrélations, déséquilibre de classes, export CSV nettoyé |
+| **1. Dashboard** | KPI, distributions, corrélations, filtres globaux (département, âge, revenus, overtime) |
+| **2. Prédiction individuelle** | Formulaire interactif, jauge de risque, recommandations RH ciblées, simulation What-If, explications SHAP locales |
+| **3. Performance des modèles** | Métriques (Accuracy, F1, ROC-AUC, MCC), matrices de confusion, courbes ROC comparatives |
+| **4. Facteurs de démission** | Feature importance (Random Forest), SHAP global (beeswarm), top 5 facteurs de départ |
+| **5. Prédiction en lot** | Upload CSV multi-employés, tableau trié par risque, export Excel/CSV |
+| **6. À Propos** | Pipeline Data Mining, dictionnaire des données, mentions éthiques |
 
-### Pistes d'amélioration
+### Page EDA & Nettoyage — Détail des 7 onglets
 
-- Simulation what-if
-- Recommandations RH
-- Liste des employés à risque
+| Onglet | Contenu |
+|---|---|
+| **📋 Aperçu** | Dimensions, types de colonnes, premières lignes, statistiques descriptives |
+| **🔍 Qualité** | Valeurs manquantes (tableau + graphique), doublons, colonnes constantes, outliers IQR + boxplots |
+| **🧹 Nettoyage** | Étapes appliquées, comparaison avant/après (lignes, colonnes, NaN), détail des valeurs écrêtées |
+| **📊 Univariée** | Histogrammes (numériques) + boxplot marginal, barres (catégorielles) + statistiques (moyenne, skewness…) |
+| **🔗 Bivariée** | Boxplots numériques × Attrition + t-test de Welch, barres empilées catégorielles + χ² avec p-valeurs |
+| **🌡️ Corrélations** | Heatmap interactive (Pearson), top corrélations avec Attrition, graphique déséquilibre de classes (donut) |
+| **📥 Export** | Résumé du nettoyage, aperçu, bouton de téléchargement CSV nettoyé |
 
 ### Technologies
 
@@ -267,5 +288,6 @@ app/
 - Plotly
 - scikit-learn
 - SHAP
-- pandas
+- pandas / numpy
+- scipy (tests statistiques)
 - joblib
