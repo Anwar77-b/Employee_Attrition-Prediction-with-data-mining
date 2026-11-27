@@ -18,6 +18,7 @@ st.set_page_config(
     layout="wide",
 )
 
+from app.theme import apply_theme, footer_html
 from app.utils import (
     load_css,
     load_data,
@@ -42,6 +43,7 @@ from app.utils import (
 
 # Inject custom stylesheet
 load_css()
+apply_theme()
 
 # Load raw data
 raw_df = load_data()
@@ -483,3 +485,11 @@ if selected_section == "Données filtrées":
         file_name="donnees_filtrees_attrition_anonymise.csv",
         mime="text/csv",
     )
+
+st.markdown(
+    footer_html(
+        "Console RH académique · Données synthétiques · "
+        "<strong>Aucune décision RH automatisée</strong>"
+    ),
+    unsafe_allow_html=True,
+)

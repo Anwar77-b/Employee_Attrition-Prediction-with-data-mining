@@ -74,8 +74,11 @@ Le ratio est d'environ **10:1**. La métrique F1-score sera privilégiée pour l
 | Tests de normalité (Shapiro-Wilk) | [`results/stat_normalite_shapiro.csv`](results/stat_normalite_shapiro.csv) |
 | Outliers IQR, Z-score, Isolation Forest, LOF | [`docs/OUTLIERS.md`](docs/OUTLIERS.md), [`notebooks/01_eda_and_cleaning.ipynb`](notebooks/01_eda_and_cleaning.ipynb), `src/preprocessing.py` |
 | Figures EDA (distributions, corrélations, taux de départ) | [`reports/figures/`](reports/figures/) |
+| Console Streamlit (8 écrans) | [`docs/INTERFACE.md`](docs/INTERFACE.md), [`app/Home.py`](app/Home.py), [`app/pages/`](app/pages/) |
 
 Rappel : les outliers sont analysés par quatre méthodes — règle IQR × 1,5 (écrêtage / winsorisation), Z-score `|z| > 3`, Isolation Forest et Local Outlier Factor — détaillées dans [`docs/OUTLIERS.md`](docs/OUTLIERS.md) et générées par [`scripts/run_outliers.py`](scripts/run_outliers.py). Le jeu brut ne contient ni valeur manquante ni doublon ; `Attrition` et `EmployeeID` ne servent jamais à la détection.
+
+Dans la console, `EmployeeID` n'est jamais affiché dans un formulaire ni utilisé comme variable de corrélation, et `Attrition` n'est jamais proposée comme entrée de prédiction.
 
 ---
 

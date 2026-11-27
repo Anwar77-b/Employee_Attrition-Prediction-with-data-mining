@@ -1,10 +1,10 @@
 [theme]
-base = "light"
-primaryColor = "#5B67F1"
-backgroundColor = "#F4F6FB"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#182033"
-font = "sans serif"
+base = "dark"
+primaryColor = "#22D3EE"
+backgroundColor = "#0A0E17"
+secondaryBackgroundColor = "#101826"
+textColor = "#E6EDF7"
+font = "monospace"
 
 [server]
 headless = true
@@ -17,3 +17,7 @@ gatherUsageStats = false
 
 [runner]
 fastReruns = true
+
+[client]
+showErrorDetails = false
+toolbarMode = "minimal"

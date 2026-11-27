@@ -18,9 +18,10 @@
 |---|---|---|
 | Jeu source | `data/raw/Employee_Attrition_DataSet.csv` | suivi |
 | Résultats CSV | `results/*.csv` (22 fichiers) et `results/optimization/*.csv` (6 fichiers) | suivis |
+| Rapport outliers | `results/outliers_report.csv` (4 méthodes : Z-score, IQR, Isolation Forest, LOF) | suivi |
 | Synthèses clés | `results/model_comparison.csv`, `results/cv_summary.csv`, `results/tableau_metriques_rapport.csv`, `results/metrics_bootstrap_ic.csv`, `results/classement_multicritere.csv`, `results/explainability_top3.csv` | suivies |
 | Statistiques | `results/stat_tests_vs_attrition.csv`, `results/stat_spearman_paires.csv`, `results/stat_normalite_shapiro.csv`, `results/stat_kruskal_wallis.csv`, `results/descriptive_stats.csv` | suivies |
-| Figures du rapport | `reports/figures/*.png` (42 figures, numéros 01 à 42) | suivies |
+| Figures du rapport | `reports/figures/*.png` (42 figures, numéros 01 à 42, dont [`36_outliers_methodes.png`](../reports/figures/36_outliers_methodes.png)) | suivies |
 | Figures du guide | `docs/figures/*.png` (3 figures) | suivies |
 | Rapport scientifique | `docs/rapport/rapport.md`, `scripts/generate_rapport.py`, `docs/Rapport_MiniProject.pdf`, `docs/Rapport_Projet.pdf` | suivis |
 | Notebooks | `notebooks/*.ipynb` (5 notebooks) | suivis |
@@ -108,3 +109,5 @@ Script complémentaire, non requis pour les vérifications du lot : `python scri
 | `docs/figures/*.png` | `scripts/generate_figures.py` | rapport PDF |
 
 Toute modification d'un producteur doit mettre à jour ce tableau et la documentation des métriques dans la même PR.
+
+La consommation de ces fichiers par la console Streamlit est décrite dans [`docs/INTERFACE.md`](../docs/INTERFACE.md).
