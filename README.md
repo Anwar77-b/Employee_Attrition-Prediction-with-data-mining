@@ -50,7 +50,7 @@ Références détaillées : [`DISCOVERY.md`](DISCOVERY.md) et [`docs/data_dictio
 | **3. Préparation des données** | [`src/preprocessing.py`](src/preprocessing.py), [`scripts/run_preprocessing.py`](scripts/run_preprocessing.py), [`docs/OUTLIERS.md`](docs/OUTLIERS.md), [`notebooks/02_preprocessing_encoding.ipynb`](notebooks/02_preprocessing_encoding.ipynb) |
 | **4. Modélisation** | [`scripts/train_pipeline.py`](scripts/train_pipeline.py) (pipeline du guide), [`scripts/train_models.py`](scripts/train_models.py) + [`src/models.py`](src/models.py) (analyse étendue), [`results/cv_summary.csv`](results/cv_summary.csv), figures `09` à `16` |
 | **5. Évaluation** | [`results/model_comparison.csv`](results/model_comparison.csv), `results/*.json`, [`tests/`](tests/), figures `17` à `23` |
-| **6. Déploiement et surveillance** | Modèles `joblib` dans `models/`, application Streamlit dans `app/` ; surveillance et concept drift discutés en limite (§9) |
+| **6. Déploiement et surveillance** | Modèles `joblib` dans `models/`, console Streamlit à 8 écrans dans [`app/`](app/Home.py) ([guide](docs/INTERFACE.md)) ; surveillance et concept drift discutés en limite (§9) |
 
 Le cycle est itératif : les résultats d'évaluation (étape 5) conduisent à ajuster la préparation (étape 3) et la modélisation (étape 4).
 
@@ -75,6 +75,8 @@ L'interface Streamlit est livrée par son propriétaire (lot 6) : `streamlit run
 | [`scripts/run_outliers.py`](scripts/run_outliers.py) | Détection des outliers : IQR, Z-score, Isolation Forest, LOF → `results/outliers_report.csv` et figure 36 |
 | [`scripts/run_explainability.py`](scripts/run_explainability.py) | Explicabilité locale SHAP (top 3 par employé) → `results/explainability_top3.csv` et figure 42 |
 | [`scripts/generate_rapport.py`](scripts/generate_rapport.py) | Rapport PDF depuis [`docs/rapport/rapport.md`](docs/rapport/rapport.md) → `docs/Rapport_MiniProject.pdf` et `docs/Rapport_Projet.pdf` |
+| [`app/Home.py`](app/Home.py) | Console Streamlit : 8 écrans (qualité, exploration, prédictions, performance, facteurs, à propos) |
+| [`docs/INTERFACE.md`](docs/INTERFACE.md) | Guide utilisateur de la console, lancement, schéma CSV et limites éthiques |
 | `scripts/generate_figures.py`, `scripts/generate_notebooks.py` | Génération des livrables graphiques / notebooks |
 
 Analyse des outliers détaillée dans [`docs/OUTLIERS.md`](docs/OUTLIERS.md), avec la comparaison graphique [`reports/figures/36_outliers_methodes.png`](reports/figures/36_outliers_methodes.png).
@@ -167,10 +169,10 @@ python scripts/run_unsupervised.py    # clustering (4 modèles historiques)
 python scripts/run_unsupervised_advanced.py  # clustering avancé (lot 3)
 python scripts/run_outliers.py        # détection avancée des outliers
 pytest tests -q                       # suite de tests
-streamlit run app/Home.py             # application web
+python -m streamlit run app/Home.py   # console web (8 écrans)
 ```
 
-Les `.joblib` et `results/*.json` sont des artefacts générés, **ignorés par Git** (voir `.gitignore`) : ils sont recréés par les scripts ci-dessus. Les `.csv` de résultats et les figures de `reports/figures/` sont versionnés.
+Le guide d'utilisation de la console est dans [`docs/INTERFACE.md`](docs/INTERFACE.md). Les `.joblib` et `results/*.json` sont des artefacts générés, **ignorés par Git** (voir `.gitignore`) : ils sont recréés par les scripts ci-dessus. Les `.csv` de résultats et les figures de `reports/figures/` sont versionnés.
 
 > [!NOTE]
 > **État connu :** le refactoring de `src/preprocessing.py` a remplacé `ALL_FEATURES` par `FEATURE_COLS` et `load_raw_data()` par `load_raw(path)`. `src/unsupervised.py` est corrigé depuis le lot 3 (test de non-régression dans [`tests/test_unsupervised.py`](tests/test_unsupervised.py)). `scripts/train_pipeline.py` définit désormais ses propres constantes de compatibilité et régénère `models/best_model.joblib` au format bundle `{model, threshold}`. Voir [`docs/CLUSTERING_AVANCE.md`](docs/CLUSTERING_AVANCE.md).
@@ -198,7 +200,8 @@ Les `.joblib` et `results/*.json` sont des artefacts générés, **ignorés par 
 | Davies-Bouldin, indice de Dunn | ✅ [`docs/CLUSTERING_AVANCE.md`](docs/CLUSTERING_AVANCE.md), figure [`40`](reports/figures/40_indices_clustering.png) |
 | Règles d'association (support, confiance) | ❌ hors périmètre du projet |
 | CRISP-DM en 6 étapes | ✅ §3 |
-| Déploiement `joblib`, application web | ✅ [`app/Home.py`](app/Home.py) — `streamlit run app/Home.py` (lot 6) |
+| Déploiement `joblib`, application web | ✅ [`app/Home.py`](app/Home.py) — `python -m streamlit run app/Home.py` (console 8 écrans) |
+| Interface graphique console adaptée aux données RH | ✅ [`docs/INTERFACE.md`](docs/INTERFACE.md) |
 | Surveillance / concept drift | ⚠️ documenté comme limite, non implémenté |
 | Rapport scientifique PDF | ✅ [`docs/Rapport_MiniProject.pdf`](docs/Rapport_MiniProject.pdf) (15 pages, lots 0 à 4) et [`docs/Rapport_Projet.pdf`](docs/Rapport_Projet.pdf) |
 
@@ -245,8 +248,9 @@ Livrables du lot 5 — [`docs/rapport/rapport.md`](docs/rapport/rapport.md), [`s
 ├── models/                    # .gitkeep + .joblib générés (ignorés)
 ├── results/                   # CSV versionnés + JSON générés (ignorés)
 ├── reports/figures/           # 42 figures
-├── docs/                      # guide, dictionnaire de données, figures
-├── app/                       # application Streamlit (interface)
+├── docs/                      # guide, dictionnaire de données, INTERFACE.md, figures
+├── app/                       # console Streamlit (8 écrans, thème centralisé)
+├── .streamlit/config.toml     # configuration visuelle de la console
 └── tests/                     # suite pytest
 ```
 

@@ -16,6 +16,7 @@ st.set_page_config(
     layout="wide",
 )
 
+from app.theme import apply_theme, footer_html
 from app.utils import (
     load_css,
     load_bundle,
@@ -39,6 +40,7 @@ from app.utils import (
 
 # Inject custom stylesheet
 load_css()
+apply_theme()
 
 # Render shared sidebar
 render_sidebar(df=None, show_filters=False)
@@ -421,3 +423,11 @@ with col_result:
             """,
             unsafe_allow_html=True,
         )
+
+st.markdown(
+    footer_html(
+        "Console RH académique · Données synthétiques · "
+        "<strong>Aucune décision RH automatisée</strong>"
+    ),
+    unsafe_allow_html=True,
+)

@@ -1,13 +1,32 @@
-"""Shared utilities, UI components and theming for the Streamlit application."""
+"""Shared utilities, UI components and theme bridge for the Streamlit app.
+
+The business schema is imported from ``src.preprocessing``; this module only
+provides display helpers and read-only artifact loaders.
+"""
+from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+
+from app.theme import (
+    ACCENT_AMBER,
+    ACCENT_CYAN,
+    ACCENT_GREEN,
+    ACCENT_ROSE,
+    TEXT_MUTED,
+    apply_theme,
+    footer_html,
+    page_divider_html,
+    risk_badge_html,
+    sidebar_header_html,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -27,26 +46,26 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA = DATA_DIR / "raw" / "Employee_Attrition_DataSet.csv"
 MODELS_DIR = PROJECT_ROOT / "models"
 RESULTS_DIR = PROJECT_ROOT / "results"
-CSS_PATH = Path(__file__).resolve().parent / "style.css"
+OUTLIER_REPORT = RESULTS_DIR / "outliers_report.csv"
 
-# ── Design Tokens & Theming ────────────────────────────────────────────
-PRIMARY_COLOR = "#5B67F1"        # Royal periwinkle
-SECONDARY_COLOR = "#34BFA3"      # Sea green
-COLOR_NO = "#20B486"             # Emerald (Stayed / Low risk)
-COLOR_YES = "#E85D75"            # Coral rose (Left / High risk)
-COLOR_WARN = "#F2A93B"           # Amber (Moderate risk)
+# ── Design tokens (re-exported for page imports) ─────────────────────────
+PRIMARY_COLOR = ACCENT_CYAN
+SECONDARY_COLOR = ACCENT_GREEN
+COLOR_NO = ACCENT_GREEN
+COLOR_YES = ACCENT_ROSE
+COLOR_WARN = ACCENT_AMBER
 COLOR_MAP = {"No": COLOR_NO, "Yes": COLOR_YES}
 
-PLOTLY_TEMPLATE = "plotly_white"
+PLOTLY_TEMPLATE = "plotly_dark"
 PLOTLY_COLORWAY = [
-    "#5B67F1",  # Periwinkle
-    "#34BFA3",  # Sea green
-    "#E85D75",  # Coral
-    "#F2A93B",  # Amber
-    "#7C5CE7",  # Violet
-    "#4BA3C7",  # Sky
-    "#97A4C2",  # Mist blue
-    "#64748B",  # Slate
+    ACCENT_CYAN,
+    ACCENT_GREEN,
+    ACCENT_ROSE,
+    ACCENT_AMBER,
+    "#7C5CE7",
+    "#4BA3C7",
+    "#97A4C2",
+    "#64748B",
 ]
 
 # ── Feature definitions (single source of truth: src.preprocessing) ────
@@ -67,101 +86,23 @@ DEPARTMENT_LIST = ["Sales", "Engineering", "Operations", "Marketing", "Finance",
 
 
 def get_plotly_template() -> str:
-    """Return a Plotly template that matches the current app theme."""
-    return "plotly_dark" if st.session_state.get("dark_mode", False) else PLOTLY_TEMPLATE
+    """Return the Plotly template matching the always-dark console theme."""
+    return PLOTLY_TEMPLATE
 
 
-# ── CSS Loading ────────────────────────────────────────────────────────
-@st.cache_data(show_spinner=False)
-def _read_app_css() -> str:
-    """Read the stylesheet once per process instead of every Streamlit rerun."""
-    if CSS_PATH.exists():
-        return CSS_PATH.read_text(encoding="utf-8")
-    return ""
-
-
+# ── CSS loading ──────────────────────────────────────────────────────────
 def load_css() -> None:
-    """Load custom CSS from app/style.css and inject into Streamlit."""
-    css = _read_app_css()
-    if css:
-        if st.session_state.get("dark_mode", False):
-            css += """
-            :root {
-                color-scheme: dark;
-                --primary-light: #312E81;
-                --bg-card: #1E293B;
-                --border-color: #334155;
-                --text-main: #F8FAFC;
-                --text-muted: #CBD5E1;
-                --risk-low-bg: rgba(6, 78, 59, 0.4);
-                --risk-low-text: #6EE7B7;
-                --risk-low-border: #059669;
-                --risk-med-bg: rgba(120, 53, 15, 0.4);
-                --risk-med-text: #FCD34D;
-                --risk-med-border: #D97706;
-                --risk-high-bg: rgba(127, 29, 29, 0.4);
-                --risk-high-text: #FCA5A5;
-                --risk-high-border: #DC2626;
-                --background-color: #0E1117;
-                --secondary-background-color: #1E293B;
-                --text-color: #F8FAFC;
-            }
-            html, body, .stApp, [data-testid="stAppViewContainer"],
-            [data-testid="stHeader"], [data-testid="stSidebar"] {
-                background-color: #0E1117 !important;
-                color: #F8FAFC;
-            }
-            [data-testid="stSidebar"] {
-                background-color: #111827 !important;
-            }
-            [data-testid="stMarkdownContainer"] p,
-            [data-testid="stMarkdownContainer"] li,
-            [data-testid="stWidgetLabel"] p,
-            [data-testid="stCaptionContainer"] {
-                color: #E2E8F0;
-            }
-            [data-testid="stMarkdownContainer"] h1,
-            [data-testid="stMarkdownContainer"] h2,
-            [data-testid="stMarkdownContainer"] h3,
-            [data-testid="stMarkdownContainer"] h4 {
-                color: #F8FAFC !important;
-            }
-            div[style*="background: white"],
-            div[style*="background:white"],
-            div[style*="background-color: white"] {
-                background: #1E293B !important;
-                color: #F8FAFC !important;
-                border-color: #334155 !important;
-            }
-            input, textarea, [data-baseweb="select"] > div,
-            [data-baseweb="popover"], [data-baseweb="menu"] {
-                background-color: #1E293B !important;
-                color: #F8FAFC !important;
-                border-color: #475569 !important;
-            }
-            [data-testid="stDataFrame"], [data-testid="stTable"] {
-                background-color: #1E293B;
-            }
-            """
-        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <style>
-        .kpi-card { background:#f9fafb; border-left:4px solid #4F46E5; padding:1rem; border-radius:0.75rem; }
-        .risk-badge { padding:0.3rem 0.8rem; border-radius:1rem; font-weight:600; }
-        .risk-low { background:#d1fae5; color:#065f46; }
-        .risk-medium { background:#fef3c7; color:#92400e; }
-        .risk-high { background:#fee2e2; color:#991b1b; }
-        </style>
-        """, unsafe_allow_html=True)
+    """Inject the unique console stylesheet."""
+    st.session_state["dark_mode"] = True
+    apply_theme()
 
 
 def inject_custom_css() -> None:
-    """Backwards compatibility alias for load_css()."""
+    """Backwards compatibility alias."""
     load_css()
 
 
-# ── Reusable UI Components ─────────────────────────────────────────────
+# ── Reusable UI components ───────────────────────────────────────────────
 def kpi_card(
     titre: str,
     valeur: Any,
@@ -170,7 +111,7 @@ def kpi_card(
     border_color: str = PRIMARY_COLOR,
     help_text: Optional[str] = None,
 ) -> None:
-    """Render a modern KPI card with a colored left border and subtle shadow."""
+    """Render a compact console metric card."""
     delta_html = ""
     if delta:
         delta_class = "neutral"
@@ -183,7 +124,7 @@ def kpi_card(
     title_attr = f'title="{help_text}"' if help_text else ""
     st.markdown(
         f"""
-        <div class="kpi-card" style="border-left-color: {border_color} !important;" {title_attr}>
+        <div class="kpi-card" style="border-top-color:{border_color} !important;" {title_attr}>
             <div class="kpi-title">{titre}</div>
             <div class="kpi-value">{valeur}</div>
             {delta_html}
@@ -194,7 +135,7 @@ def kpi_card(
 
 
 def metric_card(title: str, value: Any, css_class: str = "") -> None:
-    """Backwards compatibility metric card using the new theme style."""
+    """Backwards compatibility metric card."""
     border_color = PRIMARY_COLOR
     if "green" in css_class:
         border_color = COLOR_NO
@@ -204,25 +145,18 @@ def metric_card(title: str, value: Any, css_class: str = "") -> None:
         border_color = COLOR_WARN
     elif "blue" in css_class or "cyan" in css_class:
         border_color = SECONDARY_COLOR
-
     kpi_card(title, value, border_color=border_color)
 
 
 def risk_badge(probabilite: float, large: bool = False) -> str:
-    """Return an HTML badge string with appropriate color and label based on probability."""
-    p_pct = probabilite * 100 if probabilite <= 1.0 else probabilite
-    size_cls = "large" if large else ""
-
-    if p_pct < 30.0:
-        return f'<span class="risk-badge risk-low {size_cls}">🟢 Risque Faible ({p_pct:.1f}%)</span>'
-    elif p_pct < 60.0:
-        return f'<span class="risk-badge risk-medium {size_cls}">🟡 Risque Modéré ({p_pct:.1f}%)</span>'
-    else:
-        return f'<span class="risk-badge risk-high {size_cls}">🔴 Risque Élevé ({p_pct:.1f}%)</span>'
+    """Return the HTML badge used by prediction pages."""
+    label, _, _ = get_risk_level(probabilite)
+    prediction = "Yes" if (probabilite * 100 if probabilite <= 1 else probabilite) >= 50 else "No"
+    return risk_badge_html(label, probabilite, prediction)
 
 
 def section_header(titre: str, sous_titre: Optional[str] = None, icon: Optional[str] = None) -> None:
-    """Render a styled section header with title and subtitle."""
+    """Render a consistent section header with the console divider."""
     icon_html = f"<span>{icon}</span> " if icon else ""
     sub_html = f'<p class="section-header-subtitle">{sous_titre}</p>' if sous_titre else ""
     st.markdown(
@@ -234,12 +168,12 @@ def section_header(titre: str, sous_titre: Optional[str] = None, icon: Optional[
         """,
         unsafe_allow_html=True,
     )
+    st.markdown(page_divider_html(), unsafe_allow_html=True)
 
 
-def gauge_chart(probabilite: float, title: str = "Risque d'Attrition") -> go.Figure:
-    """Generate an interactive Plotly gauge chart for attrition risk."""
+def gauge_chart(probabilite: float, title: str = "Risque d'attrition") -> go.Figure:
+    """Generate a dark Plotly gauge for the attrition probability."""
     p_pct = probabilite * 100 if probabilite <= 1.0 else probabilite
-
     if p_pct < 30.0:
         bar_color = COLOR_NO
     elif p_pct < 60.0:
@@ -251,41 +185,36 @@ def gauge_chart(probabilite: float, title: str = "Risque d'Attrition") -> go.Fig
         go.Indicator(
             mode="gauge+number",
             value=p_pct,
-            number={"suffix": "%", "font": {"size": 38, "color": "#111827", "family": "sans-serif"}},
-            title={"text": f"<b>{title}</b>", "font": {"size": 16, "color": "#4B5563"}},
+            number={"suffix": "%", "font": {"size": 38, "color": "#E6EDF7", "family": "monospace"}},
+            title={"text": f"<b>{title}</b>", "font": {"size": 16, "color": TEXT_MUTED}},
             gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "#9CA3AF"},
+                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": TEXT_MUTED},
                 "bar": {"color": bar_color, "thickness": 0.28},
-                "bgcolor": "white",
+                "bgcolor": "#101826",
                 "borderwidth": 0,
                 "steps": [
-                    {"range": [0, 30], "color": "#D1FAE5"},
-                    {"range": [30, 60], "color": "#FEF3C7"},
-                    {"range": [60, 100], "color": "#FEE2E2"},
+                    {"range": [0, 30], "color": "#12352E"},
+                    {"range": [30, 60], "color": "#3B2C14"},
+                    {"range": [60, 100], "color": "#3D1B27"},
                 ],
-                "threshold": {
-                    "line": {"color": bar_color, "width": 4},
-                    "thickness": 0.8,
-                    "value": p_pct,
-                },
+                "threshold": {"line": {"color": bar_color, "width": 4}, "thickness": 0.8, "value": p_pct},
             },
         )
     )
-
     fig.update_layout(
         template=PLOTLY_TEMPLATE,
         height=260,
         margin=dict(t=40, b=10, l=30, r=30),
         paper_bgcolor="rgba(0,0,0,0)",
-        font={"family": "sans-serif"},
+        font={"family": "monospace", "color": "#E6EDF7"},
     )
     return fig
 
 
-# ── Data Loading & Model Loading ───────────────────────────────────────
+# ── Data and artifact loading ────────────────────────────────────────────
 @st.cache_data
 def load_data() -> Optional[pd.DataFrame]:
-    """Load the raw dataset. Returns None if file not found."""
+    """Load the raw dataset; return None when the CSV is absent."""
     if not RAW_DATA.exists():
         return None
     return pd.read_csv(RAW_DATA)
@@ -312,44 +241,65 @@ def load_model(name: str = "best_model"):
 
 @st.cache_data
 def load_json(filename: str) -> Optional[dict]:
-    """Load a JSON results file. Returns None on failure."""
+    """Load a JSON artifact from results/; return None on failure."""
     path = RESULTS_DIR / filename
     if not path.exists():
         return None
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
     except Exception:
         return None
 
 
-# ── Risk Helpers ───────────────────────────────────────────────────────
+@st.cache_data
+def load_outlier_report() -> Optional[pd.DataFrame]:
+    """Read the versioned outlier report. Never recomputes or modifies it."""
+    if not OUTLIER_REPORT.exists():
+        return None
+    try:
+        return pd.read_csv(OUTLIER_REPORT)
+    except Exception:
+        return None
+
+
+def _detect_test_artifacts() -> bool:
+    """Flag only explicit test artifacts; never infer a status from results."""
+    for folder in (MODELS_DIR, RESULTS_DIR):
+        if not folder.exists():
+            continue
+        for path in folder.iterdir():
+            name = path.name.lower()
+            if name.startswith("test_") or name.endswith("_test.joblib") or "artefact_test" in name:
+                return True
+    return False
+
+
+# ── Risk helpers ─────────────────────────────────────────────────────────
 def get_risk_level(proba: float) -> Tuple[str, str, str]:
-    """Return (label, css_class, emoji) based on attrition probability."""
+    """Return (label, css_class, emoji) from an attrition probability."""
     p_pct = proba * 100 if proba <= 1.0 else proba
     if p_pct < 30.0:
-        return "Faible", "risk-low", "🟢"
-    elif p_pct < 60.0:
-        return "Modéré", "risk-medium", "🟡"
-    else:
-        return "Élevé", "risk-high", "🔴"
+        return "Faible", "rh-risk-low", "🟢"
+    if p_pct < 60.0:
+        return "Modéré", "rh-risk-medium", "🟡"
+    return "Élevé", "rh-risk-high", "🔴"
 
 
 def get_risk_color(proba: float) -> str:
-    """Return a hex color based on attrition probability."""
+    """Return the hex color associated with a probability."""
     p_pct = proba * 100 if proba <= 1.0 else proba
     if p_pct < 30.0:
         return COLOR_NO
-    elif p_pct < 60.0:
+    if p_pct < 60.0:
         return COLOR_WARN
-    else:
-        return COLOR_YES
+    return COLOR_YES
 
 
-# ── Recommendations ───────────────────────────────────────────────────
+# ── Recommendations ──────────────────────────────────────────────────────
 def generate_recommendations(row: dict, proba: float) -> List[str]:
-    """Generate rule-based retention recommendations."""
-    recs = []
+    """Generate rule-based retention leads from editable HR features."""
+    recs: List[str] = []
     if row.get("OverTime") == "Yes":
         recs.append("⏰ **Réduire les heures supplémentaires** : l'overtime est un facteur majeur de départ.")
     if row.get("JobSatisfaction", 5) <= 2:
@@ -371,27 +321,23 @@ def generate_recommendations(row: dict, proba: float) -> List[str]:
     return recs
 
 
-# ── Global Sidebar & Filter Session State ──────────────────────────────
+# ── Sidebar and global filters ───────────────────────────────────────────
 def init_session_state(df: Optional[pd.DataFrame] = None) -> None:
-    """Initialize session state filters if not present."""
+    """Initialise global filter values once per session."""
     if "global_departments" not in st.session_state:
         if df is not None and "Department" in df.columns:
             st.session_state.global_departments = sorted(df["Department"].unique().tolist())
         else:
             st.session_state.global_departments = DEPARTMENT_LIST
-
     if "global_overtime" not in st.session_state:
         st.session_state.global_overtime = "Tous"
-
     if "global_promotion" not in st.session_state:
         st.session_state.global_promotion = "Tous"
-
     if "global_age_range" not in st.session_state:
         if df is not None and "Age" in df.columns:
             st.session_state.global_age_range = (int(df["Age"].min()), int(df["Age"].max()))
         else:
             st.session_state.global_age_range = (20, 65)
-
     if "global_income_range" not in st.session_state:
         if df is not None and "MonthlyIncome" in df.columns:
             st.session_state.global_income_range = (int(df["MonthlyIncome"].min()), int(df["MonthlyIncome"].max()))
@@ -407,52 +353,39 @@ def filter_employee_data(
     age_range: Tuple[int, int],
     income_range: Tuple[int, int],
 ) -> pd.DataFrame:
-    """Apply sidebar filters once and reuse the cached result across reruns."""
-    filtered_df = df
+    """Apply sidebar filters and return a copy."""
+    filtered = df
     if departments:
-        filtered_df = filtered_df[filtered_df["Department"].isin(departments)]
+        filtered = filtered[filtered["Department"].isin(departments)]
     if overtime == "Oui":
-        filtered_df = filtered_df[filtered_df["OverTime"] == "Yes"]
+        filtered = filtered[filtered["OverTime"] == "Yes"]
     elif overtime == "Non":
-        filtered_df = filtered_df[filtered_df["OverTime"] == "No"]
-    return filtered_df[
-        (filtered_df["Age"] >= age_range[0])
-        & (filtered_df["Age"] <= age_range[1])
-        & (filtered_df["MonthlyIncome"] >= income_range[0])
-        & (filtered_df["MonthlyIncome"] <= income_range[1])
+        filtered = filtered[filtered["OverTime"] == "No"]
+    return filtered[
+        (filtered["Age"] >= age_range[0])
+        & (filtered["Age"] <= age_range[1])
+        & (filtered["MonthlyIncome"] >= income_range[0])
+        & (filtered["MonthlyIncome"] <= income_range[1])
     ].copy()
 
 
 def render_sidebar(df: Optional[pd.DataFrame] = None, show_filters: bool = True) -> Optional[pd.DataFrame]:
-    """Render consistent sidebar branding, optional global filters, and footer."""
+    """Render the console sidebar, status panel and optional global filters."""
+    load_css()
     init_session_state(df)
 
+    dataset_available = df is not None or RAW_DATA.exists()
+    model_available = load_model() is not None
     st.sidebar.markdown(
-        """
-        <div class="sidebar-brand">
-            <span style="font-size: 1.6rem;">💼</span>
-            <div>
-                <h3 class="sidebar-brand-title">Attrition RH</h3>
-                <p class="sidebar-brand-sub">Data Mining & Classification</p>
-            </div>
-        </div>
-        """,
+        sidebar_header_html(dataset_available, model_available, _detect_test_artifacts()),
         unsafe_allow_html=True,
-    )
-
-    st.sidebar.checkbox(
-        "Mode sombre",
-        key="dark_mode",
-        help="Activer ou désactiver le thème sombre de l'application",
     )
 
     filtered_df = df.copy() if df is not None else None
 
     if show_filters and df is not None:
-        st.sidebar.markdown("##### 🔎 Filtres Globaux")
-
+        st.sidebar.markdown("##### 🔎 Filtres globaux")
         with st.sidebar.expander("⚙️ Paramètres des filtres", expanded=True):
-            # Department filter
             all_depts = sorted(df["Department"].unique().tolist())
             st.session_state.global_departments = st.multiselect(
                 "Départements",
@@ -460,37 +393,23 @@ def render_sidebar(df: Optional[pd.DataFrame] = None, show_filters: bool = True)
                 default=st.session_state.global_departments,
                 help="Filtrer par un ou plusieurs départements",
             )
-
-            # Overtime filter
             ot_options = ["Tous", "Oui", "Non"]
-            ot_idx = ot_options.index(st.session_state.global_overtime) if st.session_state.global_overtime in ot_options else 0
+            ot_index = ot_options.index(st.session_state.global_overtime) if st.session_state.global_overtime in ot_options else 0
             st.session_state.global_overtime = st.radio(
                 "Heures supplémentaires",
                 options=ot_options,
-                index=ot_idx,
+                index=ot_index,
                 horizontal=True,
-                help="Filtrer selon la réalisation d'heures supplémentaires",
             )
-
-            # Age filter
             min_age, max_age = int(df["Age"].min()), int(df["Age"].max())
             st.session_state.global_age_range = st.slider(
-                "Tranche d'âge",
-                min_value=min_age,
-                max_value=max_age,
+                "Tranche d'âge", min_value=min_age, max_value=max_age,
                 value=st.session_state.global_age_range,
-                help="Sélectionner l'intervalle d'âge des employés",
             )
-
-            # Income filter
-            min_inc, max_inc = int(df["MonthlyIncome"].min()), int(df["MonthlyIncome"].max())
+            min_income, max_income = int(df["MonthlyIncome"].min()), int(df["MonthlyIncome"].max())
             st.session_state.global_income_range = st.slider(
-                "Revenu mensuel",
-                min_value=min_inc,
-                max_value=max_inc,
-                value=st.session_state.global_income_range,
-                step=500,
-                help="Sélectionner l'intervalle de salaire mensuel",
+                "Revenu mensuel", min_value=min_income, max_value=max_income,
+                value=st.session_state.global_income_range, step=500,
             )
 
         filtered_df = filter_employee_data(
@@ -506,24 +425,35 @@ def render_sidebar(df: Optional[pd.DataFrame] = None, show_filters: bool = True)
 
 
 def render_sidebar_footer() -> None:
-    """Render the sidebar footer with links and academic disclaimer."""
+    """Render the sidebar academic disclaimer."""
     st.sidebar.markdown("---")
     st.sidebar.markdown(
         """
-        <div style="font-size: 0.78rem; color: #6B7280; line-height: 1.4;">
-            <p style="margin-bottom: 0.4rem;"><strong>📊 Data Mining 2026/2027</strong></p>
-            <p style="margin-bottom: 0.4rem;">Mini-Projet — Classification supervisée</p>
-            <p style="margin: 0;">⚠️ <em>Jeu de données synthétique à vocation académique.</em></p>
+        <div class="rh-status-row" style="line-height:1.5;">
+            <strong>📊 Data Mining 2026/2027</strong><br>
+            Mini-projet — classification supervisée<br>
+            ⚠️ Jeu synthétique : aucune décision RH réelle.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-# ── Missing Artifact Warning ──────────────────────────────────────────
+def render_page_footer() -> None:
+    """Render the identical footer on every page."""
+    st.markdown(
+        footer_html(
+            "Console RH académique · Données synthétiques · "
+            "<strong>Aucune décision RH automatisée</strong>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+# ── Missing artifact warning ────────────────────────────────────────────
 def show_missing_artifact_warning(artifact_name: str, fix_command: str = "") -> None:
     """Show a styled warning banner when an artifact is missing."""
-    st.warning(
-        f"⚠️ **Artefact manquant : {artifact_name}**\n\n"
-        + (f"Pour générer cet élément, exécutez la commande suivante dans le terminal :\n```powershell\n{fix_command}\n```" if fix_command else "")
-    )
+    message = f"⚠️ **Artefact manquant : {artifact_name}**"
+    if fix_command:
+        message += f"\n\nCommande de régénération :\n```powershell\n{fix_command}\n```"
+    st.warning(message)

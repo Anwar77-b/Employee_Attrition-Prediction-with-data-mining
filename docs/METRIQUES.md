@@ -5,6 +5,8 @@
 
 Références : [`README.md`](../README.md) (sections 5 et 6), [`results/model_comparison.csv`](../results/model_comparison.csv), [`results/tableau_metriques_rapport.csv`](../results/tableau_metriques_rapport.csv), [`results/cv_summary.csv`](../results/cv_summary.csv).
 
+La console Streamlit affiche ces métriques telles qu'elles figurent dans les artefacts versionnés ; elle ne les recalcule pas et n'en modifie aucune valeur.
+
 ---
 
 ## 1. Notations

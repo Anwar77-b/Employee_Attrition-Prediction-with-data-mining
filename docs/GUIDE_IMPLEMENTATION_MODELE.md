@@ -91,14 +91,18 @@ La page d'accueil peut avoir besoin du nom et du critere de selection du meilleu
 
 ## 5. Connexion aux pages Streamlit
 
-- **Accueil (`app/Home.py`)** : charger les metriques disponibles pour les indicateurs. Si le modele ou ses resultats manquent, afficher l'avertissement avec la commande de generation exacte (`python scripts/train_pipeline.py`), sans erreur non geree.
-- **Dashboard (`app/pages/1_Dashboard.py`)** : lire les colonnes depuis le dataset reel ; les distributions et filtres doivent utiliser les modalites presentes dans les donnees, pas des variables hypothetique de l'exemple.
-- **Prediction individuelle (`app/pages/2_Prediction.py`)** : construire un DataFrame d'une ligne, avec les noms des 12 features et des types compatibles ; afficher prediction, probabilite de `Yes` et seuil de risque clairement. Le modele charge doit rester le pipeline complet.
-- **Performance (`app/pages/3_Performance_Modeles.py`)** : lire les JSON de `results/` selon le contrat ci-dessus. Les metriques de test et les scores de CV doivent etre nommes separement.
-- **Facteurs (`app/pages/4_Facteurs_Demission.py`)** : les importances natives existent pour les arbres/foret. Pour K-NN, SVM ou Naive Bayes, employer une methode explicable compatible, comme une importance par permutation sur un echantillon, ou indiquer clairement que la mesure n'est pas disponible. Pour l'explicabilité locale, utiliser `src.explainability.explain_local` plutôt que de refaire un calcul SHAP dans chaque notebook. SHAP est une aide d'explicabilite, pas un modele predictif.
-- **Prediction en lot (`app/pages/5_Prediction_en_lot.py`)** : valider toutes les colonnes avant prediction, signaler celles manquantes, ignorer ou retirer explicitement les colonnes supplementaires, et aligner le DataFrame sur `ALL_FEATURES`. Trier les resultats selon la probabilite de classe `Yes`.
+La console compte huit ecrans, decrits dans [`INTERFACE.md`](INTERFACE.md). Le contrat modele reste identique : `models/best_model.joblib` est une `Pipeline` complete, les entrees sont exactement `src.preprocessing.FEATURE_COLS`, la probabilite de depart est `predict_proba(X)[:, 1]`, et ni `Attrition` ni `EmployeeID` ne sont envoyes au modele.
 
-Le pied de page et les resultats doivent rappeler que les donnees sont synthetiques et que le modele ne convient pas aux decisions reelles de ressources humaines. Les scores ne prouvent pas la causalite et ne doivent pas etre interpretes comme une evaluation individuelle fiable.
+- **Accueil (`app/Home.py`)** : KPI calcules depuis le CSV brut et liens vers les sept autres ecrans. Si un artefact manque, afficher un avertissement explicite sans erreur non geree.
+- **Qualite et outliers (`app/pages/0_Qualite_Donnees.py`)** : lecture seule de `results/outliers_report.csv` ; aucune methode n'est recalculee dans l'interface.
+- **Exploration (`app/pages/1_Dashboard.py`)** : colonnes et modalites lues dans le jeu reel. Les correlations excluent `EmployeeID` et `Attrition`.
+- **Prediction individuelle (`app/pages/2_Prediction.py`)** : DataFrame d'une ligne aligne sur `FEATURE_COLS`, badge de risque, jauge et recommandations. Le pipeline charge reste le modele complet.
+- **Performance (`app/pages/3_Performance_Modeles.py`)** : lecture des JSON de `results/` ; metriques de test et scores de CV restent nommes separement.
+- **Facteurs (`app/pages/4_Facteurs_Demission.py`)** : importances et SHAP uniquement a partir des artefacts existants ; pour l'explicabilite locale, utiliser `src.explainability.explain_local` plutot que de refaire un calcul SHAP dans la page. Indiquer clairement lorsqu'une mesure n'est pas disponible ; SHAP est une aide d'explicabilite, pas un modele predictif.
+- **Prediction en lot (`app/pages/5_Prediction_en_lot.py`)** : valider les 12 colonnes, signaler les colonnes manquantes, retirer explicitement les colonnes supplementaires, aligner sur `FEATURE_COLS` et trier par probabilite de `Yes`.
+- **A propos (`app/pages/6_A_Propos.py`)** : CRISP-DM, dictionnaire, contrats et limites ethiques.
+
+Le pied de page et les resultats rappellent que les donnees sont synthetiques et que le modele ne convient pas aux decisions reelles de ressources humaines. Les scores ne prouvent pas la causalite et ne doivent pas etre interpretes comme une evaluation individuelle fiable.
 
 ## 6. Procedure d'equipe
 

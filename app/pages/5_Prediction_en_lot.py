@@ -17,12 +17,12 @@ st.set_page_config(
     layout="wide",
 )
 
+from app.theme import apply_theme, footer_html
 from app.utils import (
     load_css,
     load_bundle,
     get_plotly_template,
     kpi_card,
-    risk_badge,
     section_header,
     render_sidebar,
     show_missing_artifact_warning,
@@ -39,6 +39,7 @@ from app.utils import (
 
 # Inject custom stylesheet
 load_css()
+apply_theme()
 
 # Render shared sidebar
 render_sidebar(df=None, show_filters=False)
@@ -51,9 +52,9 @@ section_header(
     icon="📦",
 )
 
-# Template data for download and quick testing
+# Template data for download and quick testing — only model features.
+# Neither the identifier nor the target is an input variable.
 template_data = {
-    "EmployeeID": ["EMP1001", "EMP1002", "EMP1003", "EMP1004", "EMP1005", "EMP1006"],
     "Age": [35, 28, 48, 24, 41, 31],
     "Department": ["Engineering", "Sales", "Finance", "Marketing", "Operations", "IT"],
     "JobLevel": [3, 1, 4, 1, 3, 2],
@@ -107,6 +108,8 @@ input_df = None
 if uploaded_file is not None:
     try:
         input_df = pd.read_csv(uploaded_file)
+        # The identifier and the target are never inputs, outputs or exports.
+        input_df = input_df.drop(columns=[c for c in ("EmployeeID", "Attrition") if c in input_df.columns])
     except Exception as err:
         st.error(f"❌ Erreur lors de la lecture du fichier CSV : {err}")
 elif use_sample or ("batch_sample_loaded" in st.session_state and st.session_state.batch_sample_loaded):
@@ -282,3 +285,11 @@ else:
         file_name="predictions_attrition_lot.csv",
         mime="text/csv",
     )
+
+st.markdown(
+    footer_html(
+        "Console RH académique · Données synthétiques · "
+        "<strong>Aucune décision RH automatisée</strong>"
+    ),
+    unsafe_allow_html=True,
+)
